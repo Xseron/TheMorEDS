@@ -1,0 +1,9 @@
+# SDK НУЦ РК — под их лицензией, в публичный репозиторий не кладём
+pkisdk/
+
+target/
+node_modules/
+.anchor/
+test-ledger/
+*.log
+.DS_Store
