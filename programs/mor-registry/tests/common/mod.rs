@@ -1,15 +1,22 @@
 #![allow(dead_code)]
 
 use {
-    anchor_lang::{prelude::Pubkey, pubkey, solana_program::instruction::Instruction},
+    anchor_lang::{
+        prelude::{Clock, Pubkey},
+        pubkey,
+        solana_program::{bpf_loader_upgradeable, instruction::Instruction, system_program},
+        AccountDeserialize, InstructionData, ToAccountMetas,
+    },
     litesvm::{
         types::{FailedTransactionMetadata, TransactionMetadata},
         LiteSVM,
     },
+    mor_registry::{error::MorError, state::TrustKind, x509},
     p256::{
         elliptic_curve::{ops::Reduce, PrimeField},
         Scalar, U256,
     },
+    sha2::{Digest, Sha256},
     solana_instruction::error::InstructionError,
     solana_keypair::Keypair,
     solana_message::{Message, VersionedMessage},
@@ -19,6 +26,197 @@ use {
 };
 
 pub const SECP256R1_PROGRAM_ID: Pubkey = pubkey!("Secp256r1SigVerify1111111111111111111111111");
+
+pub type TxResult = Result<TransactionMetadata, FailedTransactionMetadata>;
+
+/// 2026-10-01T00:00:00Z — внутри срока действия фикстур (выпущены 2026-09-28 на 10 лет).
+pub const NOW: i64 = 1_790_812_800;
+
+pub const CA1: &[u8] = include_bytes!("../../../../fixtures/ca1.der");
+pub const CA1B: &[u8] = include_bytes!("../../../../fixtures/ca1b.der");
+pub const CA2: &[u8] = include_bytes!("../../../../fixtures/ca2.der");
+pub const EE_SMALL: &[u8] = include_bytes!("../../../../fixtures/ee_small.der");
+pub const EE_LARGE: &[u8] = include_bytes!("../../../../fixtures/ee_large.der");
+pub const EE_OTHER_CA: &[u8] = include_bytes!("../../../../fixtures/ee_other_ca.der");
+pub const EE_WRONG_ISSUER: &[u8] = include_bytes!("../../../../fixtures/ee_wrong_issuer.der");
+pub const EE_RSA: &[u8] = include_bytes!("../../../../fixtures/ee_rsa.der");
+pub const EE_NO_ORGID: &[u8] = include_bytes!("../../../../fixtures/ee_no_orgid.der");
+pub const EE_PERSON: &[u8] = include_bytes!("../../../../fixtures/ee_person.der");
+
+pub fn sha256(data: &[u8]) -> [u8; 32] {
+    Sha256::digest(data).into()
+}
+
+/// 0x04‖X‖Y → (0x02 | (Y & 1))‖X.
+pub fn compress_p256(uncompressed: &[u8]) -> [u8; 33] {
+    assert_eq!(uncompressed.len(), 65);
+    assert_eq!(uncompressed[0], 0x04);
+    let mut out = [0u8; 33];
+    out[0] = 0x02 | (uncompressed[64] & 1);
+    out[1..].copy_from_slice(&uncompressed[1..33]);
+    out
+}
+
+pub struct CaFixture {
+    pub der: &'static [u8],
+    pub pubkey: [u8; 33],
+    pub spki_hash: [u8; 32],
+    pub dn_hash: [u8; 32],
+    pub name: &'static str,
+    pub country: [u8; 2],
+}
+
+fn ca_fixture(der: &'static [u8], name: &'static str, country: [u8; 2]) -> CaFixture {
+    let (tbs, _) = x509::split_certificate(der).unwrap();
+    let info = x509::parse_tbs(tbs).unwrap();
+    CaFixture {
+        der,
+        pubkey: compress_p256(info.public_key),
+        spki_hash: sha256(info.spki),
+        dn_hash: sha256(info.subject),
+        name,
+        country,
+    }
+}
+
+pub fn ca1() -> CaFixture {
+    ca_fixture(CA1, "Mor Test QTSP", *b"EE")
+}
+
+pub fn ca2() -> CaFixture {
+    ca_fixture(CA2, "Other QTSP", *b"LT")
+}
+
+fn program_bytes() -> Vec<u8> {
+    let path = std::env::var("MOR_SO")
+        .unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/deploy/mor_registry.so").to_string());
+    std::fs::read(&path).unwrap_or_else(|e| panic!("run `anchor build` first: {path}: {e}"))
+}
+
+/// LiteSVM создаёт ProgramData с upgrade_authority_address = None.
+/// bincode-раскладка: [u32 tag = 3][u64 slot][u8 Some = 1][32 байта pubkey].
+fn set_upgrade_authority(svm: &mut LiteSVM, program_id: &Pubkey, authority: &Pubkey) {
+    let (programdata, _) =
+        Pubkey::find_program_address(&[program_id.as_ref()], &bpf_loader_upgradeable::ID);
+    let mut acc = svm.get_account(&programdata).expect("ProgramData exists");
+    acc.data[12] = 1;
+    acc.data[13..45].copy_from_slice(authority.as_ref());
+    svm.set_account(programdata, acc).unwrap();
+}
+
+pub struct Env {
+    pub svm: LiteSVM,
+    pub admin: Keypair,
+    pub payer: Keypair,
+    pub program_id: Pubkey,
+}
+
+impl Env {
+    pub fn new() -> Env {
+        let program_id = mor_registry::id();
+        let mut svm = LiteSVM::new();
+        svm.add_program(program_id, &program_bytes()).unwrap();
+        let admin = Keypair::new();
+        let payer = Keypair::new();
+        set_upgrade_authority(&mut svm, &program_id, &admin.pubkey());
+        svm.airdrop(&admin.pubkey(), 10_000_000_000).unwrap();
+        svm.airdrop(&payer.pubkey(), 10_000_000_000).unwrap();
+        let mut env = Env { svm, admin, payer, program_id };
+        env.set_clock(NOW);
+        env
+    }
+
+    pub fn set_clock(&mut self, unix_timestamp: i64) {
+        self.svm.set_sysvar(&Clock {
+            slot: 100,
+            epoch_start_timestamp: unix_timestamp,
+            epoch: 0,
+            leader_schedule_epoch: 0,
+            unix_timestamp,
+        });
+    }
+
+    pub fn fund_new(&mut self) -> Keypair {
+        let kp = Keypair::new();
+        self.svm.airdrop(&kp.pubkey(), 10_000_000_000).unwrap();
+        kp
+    }
+
+    pub fn config_pda(&self) -> Pubkey {
+        Pubkey::find_program_address(&[mor_registry::CONFIG_SEED], &self.program_id).0
+    }
+
+    pub fn trust_pda(&self, spki_hash: &[u8; 32]) -> Pubkey {
+        Pubkey::find_program_address(&[mor_registry::TRUST_SEED, spki_hash.as_slice()], &self.program_id).0
+    }
+
+    pub fn cert_pda(&self, trust: &Pubkey, serial: &[u8]) -> Pubkey {
+        Pubkey::find_program_address(&[mor_registry::CERT_SEED, trust.as_ref(), serial], &self.program_id).0
+    }
+
+    pub fn send(&mut self, payer: &Keypair, signers: &[&Keypair], ixs: &[Instruction]) -> TxResult {
+        send(&mut self.svm, payer, signers, ixs)
+    }
+
+    pub fn initialize_as(&mut self, signer: &Keypair) -> TxResult {
+        let (program_data, _) =
+            Pubkey::find_program_address(&[self.program_id.as_ref()], &bpf_loader_upgradeable::ID);
+        let ix = Instruction::new_with_bytes(
+            self.program_id,
+            &mor_registry::instruction::Initialize {}.data(),
+            mor_registry::accounts::Initialize {
+                admin: signer.pubkey(),
+                config: self.config_pda(),
+                program: self.program_id,
+                program_data,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+        );
+        self.send(signer, &[], &[ix])
+    }
+
+    pub fn initialize(&mut self) -> TxResult {
+        let admin = self.admin.insecure_clone();
+        self.initialize_as(&admin)
+    }
+
+    pub fn add_trust_service_as(&mut self, signer: &Keypair, kind: TrustKind, ca: &CaFixture) -> TxResult {
+        let ix = Instruction::new_with_bytes(
+            self.program_id,
+            &mor_registry::instruction::AddTrustService {
+                kind,
+                pubkey: ca.pubkey,
+                spki_hash: ca.spki_hash,
+                subject_dn_hash: ca.dn_hash,
+                name: ca.name.to_string(),
+                country: ca.country,
+            }
+            .data(),
+            mor_registry::accounts::AddTrustService {
+                admin: signer.pubkey(),
+                config: self.config_pda(),
+                trust_service: self.trust_pda(&ca.spki_hash),
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+        );
+        self.send(signer, &[], &[ix])
+    }
+
+    /// Регистрирует УЦ от админа, возвращает адрес TrustService.
+    pub fn add_trust_service(&mut self, ca: &CaFixture) -> Pubkey {
+        let admin = self.admin.insecure_clone();
+        self.add_trust_service_as(&admin, TrustKind::P256Ca, ca)
+            .unwrap_or_else(|e| panic!("add_trust_service failed: {:?}\n{:#?}", e.err, e.meta.logs));
+        self.trust_pda(&ca.spki_hash)
+    }
+
+    pub fn account<T: AccountDeserialize>(&self, key: &Pubkey) -> T {
+        let acc = self.svm.get_account(key).unwrap_or_else(|| panic!("account {key} missing"));
+        T::try_deserialize(&mut acc.data.as_slice()).unwrap()
+    }
+}
 
 /// Layout SIMD-0075: [num_signatures u8][padding u8][7 x u16 LE][data].
 pub fn secp256r1_ix_raw(num_sigs: u8, offsets: [u16; 7], payload: &[u8]) -> Instruction {
@@ -72,6 +270,18 @@ pub fn failed_ix(err: &FailedTransactionMetadata) -> Option<(u8, u32)> {
     match &err.err {
         TransactionError::InstructionError(ix, InstructionError::Custom(code)) => Some((*ix, *code)),
         _ => None,
+    }
+}
+
+/// Anchor-ошибка `expected` в инструкции `ix_index` (коды 6000 + номер варианта).
+pub fn assert_mor_err(res: &TxResult, expected: MorError, ix_index: u8) {
+    let want = u32::from(expected);
+    match res {
+        Ok(_) => panic!("expected {expected:?}, transaction succeeded"),
+        Err(e) => match failed_ix(e) {
+            Some((ix, code)) if ix == ix_index && code == want => {}
+            other => panic!("expected {expected:?} ({want}) at ix {ix_index}, got {other:?}; err={:?}\nlogs={:#?}", e.err, e.meta.logs),
+        },
     }
 }
 
