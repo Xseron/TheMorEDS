@@ -1,0 +1,22 @@
+skip_local_validator = true
+
+[toolchain]
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.devnet]
+mor_registry = "CqbwC3DF4APG6cjRneir1UPuBbh49ttBrKasfc5QP1aP"
+
+[programs.localnet]
+mor_registry = "CqbwC3DF4APG6cjRneir1UPuBbh49ttBrKasfc5QP1aP"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "cargo test"
+
+[hooks]
