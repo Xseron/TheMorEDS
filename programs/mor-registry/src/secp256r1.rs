@@ -42,6 +42,8 @@ pub fn parse_self_contained(data: &[u8]) -> Result<VerifiedSignature<'_>> {
 
     let slice = |off: u16, len: usize| -> Result<&[u8]> {
         let start = off as usize;
+        // Overflow is impossible by construction: u16 offset + u16-derived length on 64-bit usize.
+        // This check is kept as a defensive guard.
         let end = start.checked_add(len).ok_or(MorError::PrecompileMalformed)?;
         data.get(start..end).ok_or_else(|| error!(MorError::PrecompileMalformed))
     };
@@ -125,7 +127,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_offset_overflow() {
+    fn rejects_max_u16_offset_and_length() {
         let off = [49, 0xFFFF, 16, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF];
         let d = data(1, off, &payload(b"hello"));
         assert_eq!(code(parse_self_contained(&d).unwrap_err()), u32::from(MorError::PrecompileMalformed));
