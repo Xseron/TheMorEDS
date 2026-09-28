@@ -1876,6 +1876,7 @@ dependencies = [
  "hex",
  "litesvm",
  "p256",
+ "rand_core 0.6.4",
  "sha2 0.10.9",
  "solana-account",
  "solana-instruction 3.5.1",
