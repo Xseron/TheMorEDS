@@ -112,7 +112,7 @@ pub struct TbsInfo<'a> {
     pub org_name: Option<&'a str>,
     pub org_id: Option<&'a str>,
     pub country: Option<[u8; 2]>,
-    /// В subject есть surname, givenName или serialNumber.
+    /// В subject есть surname, givenName, serialNumber или pseudonym.
     pub has_person_attrs: bool,
     /// basicConstraints cA; false, если расширения нет.
     pub ca: bool,
@@ -346,7 +346,7 @@ fn parse_subject(mut body: &[u8]) -> R<SubjectAttrs<'_>> {
                     return Err(X509Error::Malformed);
                 }
                 out.country = Some([s[0], s[1]]);
-            } else if oid == OID_SURNAME || oid == OID_GIVEN_NAME || oid == OID_SERIAL_NUMBER {
+            } else if oid == OID_SURNAME || oid == OID_GIVEN_NAME || oid == OID_SERIAL_NUMBER || oid == OID_PSEUDONYM {
                 out.has_person_attrs = true;
             }
         }
@@ -463,6 +463,20 @@ mod tests {
     fn detects_person_attributes() {
         assert!(tbs(EE_PERSON).has_person_attrs);
         assert_eq!(tbs(EE_PERSON).org_id, Some("NTREE-12345678"));
+    }
+
+    #[test]
+    fn detects_pseudonym_as_person_attribute() {
+        // Name с O и organizationIdentifier; с pseudonym (2.5.4.65 = 55 04 41) и без него.
+        let rdn = |oid: &[u8], value: &[u8]| {
+            let atv = [test_der::tlv(TAG_OID, oid), test_der::tlv(TAG_UTF8_STRING, value)].concat();
+            test_der::tlv(TAG_SET, &test_der::tlv(TAG_SEQUENCE, &atv))
+        };
+        let org = [rdn(&[0x55, 0x04, 0x0a], b"Acme Robotics"), rdn(&[0x55, 0x04, 0x61], b"NTREE-12345678")].concat();
+        let a = parse_subject(&org).unwrap();
+        assert_eq!((a.org_name, a.org_id, a.has_person_attrs), (Some("Acme Robotics"), Some("NTREE-12345678"), false));
+        let with_pseudonym = [org, rdn(&[0x55, 0x04, 0x41], b"Mari-7")].concat();
+        assert!(parse_subject(&with_pseudonym).unwrap().has_person_attrs);
     }
 
     #[test]

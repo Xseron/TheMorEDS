@@ -104,7 +104,8 @@ pub fn evaluate_certificate<'a>(tbs: &'a [u8], now: i64, issuer_dn_hash: &[u8; 3
         (Some(name), Some(id)) => (name, id),
         _ => return err!(MorError::MissingOrgAttributes),
     };
-    // Сертификат сотрудника: имя и личный номер навсегда остались бы в данных транзакции.
+    // Сертификат физлица или сотрудника. Это страховка: TBS уже лежит в транзакции, поэтому
+    // личные данные не пускает в сеть клиентская проверка до отправки (scripts/devnet-v1).
     require!(!info.has_person_attrs, MorError::NaturalPersonCert);
 
     let mut subject_key = [0u8; 33];

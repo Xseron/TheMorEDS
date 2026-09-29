@@ -25,6 +25,7 @@ pub const OID_ORG_ID: &[u8] = &[0x55, 0x04, 0x61]; // 2.5.4.97 organizationIdent
 pub const OID_SURNAME: &[u8] = &[0x55, 0x04, 0x04]; // 2.5.4.4
 pub const OID_GIVEN_NAME: &[u8] = &[0x55, 0x04, 0x2a]; // 2.5.4.42
 pub const OID_SERIAL_NUMBER: &[u8] = &[0x55, 0x04, 0x05]; // 2.5.4.5
+pub const OID_PSEUDONYM: &[u8] = &[0x55, 0x04, 0x41]; // 2.5.4.65
 
 // Расширения X.509 (RFC 5280 §4.2.1).
 pub const OID_KEY_USAGE: &[u8] = &[0x55, 0x1d, 0x0f]; // 2.5.29.15
