@@ -30,6 +30,8 @@ import * as ix from './anchor.js';
 const ROOT = join(import.meta.dirname, '..', '..', '..');
 const RPC = process.env.RPC_URL ?? 'https://api.devnet.solana.com';
 const WS = process.env.WS_URL ?? 'wss://api.devnet.solana.com';
+// Адрес программы публичный: секретный keypair программы для этого не нужен.
+const PROGRAM_ID = process.env.PROGRAM_ID ?? 'CqbwC3DF4APG6cjRneir1UPuBbh49ttBrKasfc5QP1aP';
 const EE_CERT = join(ROOT, 'fixtures/ee_large.der');
 
 const sha256 = (b: Uint8Array) => new Uint8Array(createHash('sha256').update(b).digest());
@@ -49,7 +51,7 @@ async function main() {
   const sendAndConfirm = sendAndConfirmTransactionFactory({ rpc, rpcSubscriptions });
 
   const payer = await loadKeypair(join(homedir(), '.config/solana/id.json'));
-  const program = (await loadKeypair(join(ROOT, 'target/deploy/mor_registry-keypair.json'))).address;
+  const program = address(PROGRAM_ID);
   console.log('payer  ', payer.address);
   console.log('program', program);
 
