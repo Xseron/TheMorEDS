@@ -1,0 +1,16 @@
+{
+  "name": "mor-devnet-v1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "devnet": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@solana/kit": "^8.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}
