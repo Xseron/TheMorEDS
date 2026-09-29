@@ -30,9 +30,6 @@ pub const SECP256R1_PROGRAM_ID: Pubkey = pubkey!("Secp256r1SigVerify111111111111
 
 pub type TxResult = Result<TransactionMetadata, FailedTransactionMetadata>;
 
-/// 2026-10-01T00:00:00Z — внутри срока действия фикстур (выпущены 2026-09-28 на 10 лет).
-pub const NOW: i64 = 1_790_812_800;
-
 pub const CA1: &[u8] = include_bytes!("../../../../fixtures/ca1.der");
 pub const CA1B: &[u8] = include_bytes!("../../../../fixtures/ca1b.der");
 pub const CA2: &[u8] = include_bytes!("../../../../fixtures/ca2.der");
@@ -43,6 +40,19 @@ pub const EE_WRONG_ISSUER: &[u8] = include_bytes!("../../../../fixtures/ee_wrong
 pub const EE_RSA: &[u8] = include_bytes!("../../../../fixtures/ee_rsa.der");
 pub const EE_NO_ORGID: &[u8] = include_bytes!("../../../../fixtures/ee_no_orgid.der");
 pub const EE_PERSON: &[u8] = include_bytes!("../../../../fixtures/ee_person.der");
+
+/// (notBefore, notAfter) сертификата в unix-секундах.
+pub fn validity(der: &[u8]) -> (i64, i64) {
+    let (tbs, _) = x509::split_certificate(der).unwrap();
+    let info = x509::parse_tbs(tbs).unwrap();
+    (info.not_before, info.not_after)
+}
+
+/// Часы тестов: notBefore `ee_small` + 3 дня. Фикстуры выпускаются в момент запуска
+/// `fixtures/gen.sh` на 10 лет, поэтому момент берётся из них, а не задаётся датой.
+pub fn now() -> i64 {
+    validity(EE_SMALL).0 + 3 * 86_400
+}
 
 pub fn sha256(data: &[u8]) -> [u8; 32] {
     Sha256::digest(data).into()
@@ -123,7 +133,7 @@ impl Env {
         svm.airdrop(&admin.pubkey(), 10_000_000_000).unwrap();
         svm.airdrop(&payer.pubkey(), 10_000_000_000).unwrap();
         let mut env = Env { svm, admin, payer, program_id };
-        env.set_clock(NOW);
+        env.set_clock(now());
         env
     }
 

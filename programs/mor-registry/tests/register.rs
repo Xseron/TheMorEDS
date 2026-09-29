@@ -31,8 +31,9 @@ fn registers_small_certificate() {
     assert_eq!(acc.org_name, "Acme Robotics");
     assert_eq!(acc.org_id, "NTREE-12345678");
     assert_eq!(acc.country, *b"EE");
-    assert!(acc.not_before <= NOW && NOW <= acc.not_after);
-    assert_eq!(acc.registered_at, NOW);
+    let now = now();
+    assert!(acc.not_before <= now && now <= acc.not_after);
+    assert_eq!(acc.registered_at, now);
 }
 
 #[test]

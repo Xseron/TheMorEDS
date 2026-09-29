@@ -129,10 +129,14 @@ mod tests {
     const EE_RSA: &[u8] = include_bytes!("../../../../fixtures/ee_rsa.der");
     const EE_NO_ORGID: &[u8] = include_bytes!("../../../../fixtures/ee_no_orgid.der");
     const EE_PERSON: &[u8] = include_bytes!("../../../../fixtures/ee_person.der");
-    const NOW: i64 = 1_790_812_800; // 2026-10-01
 
     fn tbs(der: &[u8]) -> &[u8] {
         x509::split_certificate(der).unwrap().0
+    }
+
+    /// notBefore `ee_small` + 3 дня: фикстуры выпускаются в момент запуска gen.sh.
+    fn now() -> i64 {
+        x509::parse_tbs(tbs(EE_SMALL)).unwrap().not_before + 3 * 86_400
     }
 
     fn ca1_dn_hash() -> [u8; 32] {
@@ -153,7 +157,7 @@ mod tests {
 
     #[test]
     fn accepts_small_certificate() {
-        let f = evaluate_certificate(tbs(EE_SMALL), NOW, &ca1_dn_hash()).unwrap();
+        let f = evaluate_certificate(tbs(EE_SMALL), now(), &ca1_dn_hash()).unwrap();
         assert_eq!(f.org_name, "Acme Robotics");
         assert_eq!(f.org_id, "NTREE-12345678");
         assert_eq!(f.country, *b"EE");
@@ -166,37 +170,38 @@ mod tests {
         let mut t = tbs(EE_SMALL).to_vec();
         let pos = t.windows(8).position(|w| w == OID_ECDSA_WITH_SHA256).unwrap();
         t[pos + 7] = 0x03; // ecdsa-with-SHA384
-        expect_err(evaluate_certificate(&t, NOW, &ca1_dn_hash()), MorError::BadSignatureAlgorithm);
+        expect_err(evaluate_certificate(&t, now(), &ca1_dn_hash()), MorError::BadSignatureAlgorithm);
     }
 
     #[test]
     fn rejects_issuer_mismatch() {
-        expect_err(evaluate_certificate(tbs(EE_WRONG_ISSUER), NOW, &ca1_dn_hash()), MorError::IssuerMismatch);
+        expect_err(evaluate_certificate(tbs(EE_WRONG_ISSUER), now(), &ca1_dn_hash()), MorError::IssuerMismatch);
     }
 
     #[test]
     fn rejects_outside_validity() {
-        expect_err(evaluate_certificate(tbs(EE_SMALL), 1_600_000_000, &ca1_dn_hash()), MorError::CertNotYetValid);
-        expect_err(evaluate_certificate(tbs(EE_SMALL), 2_200_000_000, &ca1_dn_hash()), MorError::CertExpired);
+        let info = x509::parse_tbs(tbs(EE_SMALL)).unwrap();
+        expect_err(evaluate_certificate(tbs(EE_SMALL), info.not_before - 1, &ca1_dn_hash()), MorError::CertNotYetValid);
+        expect_err(evaluate_certificate(tbs(EE_SMALL), info.not_after + 1, &ca1_dn_hash()), MorError::CertExpired);
     }
 
     #[test]
     fn rejects_rsa_key() {
-        expect_err(evaluate_certificate(tbs(EE_RSA), NOW, &ca1_dn_hash()), MorError::UnsupportedKey);
+        expect_err(evaluate_certificate(tbs(EE_RSA), now(), &ca1_dn_hash()), MorError::UnsupportedKey);
     }
 
     #[test]
     fn rejects_missing_org_id() {
-        expect_err(evaluate_certificate(tbs(EE_NO_ORGID), NOW, &ca1_dn_hash()), MorError::MissingOrgAttributes);
+        expect_err(evaluate_certificate(tbs(EE_NO_ORGID), now(), &ca1_dn_hash()), MorError::MissingOrgAttributes);
     }
 
     #[test]
     fn rejects_natural_person() {
-        expect_err(evaluate_certificate(tbs(EE_PERSON), NOW, &ca1_dn_hash()), MorError::NaturalPersonCert);
+        expect_err(evaluate_certificate(tbs(EE_PERSON), now(), &ca1_dn_hash()), MorError::NaturalPersonCert);
     }
 
     #[test]
     fn rejects_garbage() {
-        expect_err(evaluate_certificate(b"not der at all", NOW, &ca1_dn_hash()), MorError::DerMalformed);
+        expect_err(evaluate_certificate(b"not der at all", now(), &ca1_dn_hash()), MorError::DerMalformed);
     }
 }

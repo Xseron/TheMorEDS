@@ -114,14 +114,15 @@ fn rejects_serial_mismatch() {
     assert_mor_err(&res, MorError::SerialMismatch, 1);
 }
 
-// 9. Срок действия: часы переведены.
+// 9. Срок действия: часы переведены на секунду за границы notBefore/notAfter.
 #[test]
 fn rejects_expired_and_not_yet_valid() {
     let (mut env, ca, trust) = env_with_ca1();
-    env.set_clock(2_200_000_000);
+    let (not_before, not_after) = validity(EE_SMALL);
+    env.set_clock(not_after + 1);
     let res = env.register(&trust, &ca.pubkey, &ee(EE_SMALL));
     assert_mor_err(&res, MorError::CertExpired, 1);
-    env.set_clock(1_600_000_000);
+    env.set_clock(not_before - 1);
     let res = env.register(&trust, &ca.pubkey, &ee(EE_SMALL));
     assert_mor_err(&res, MorError::CertNotYetValid, 1);
 }
