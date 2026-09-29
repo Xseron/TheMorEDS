@@ -316,7 +316,14 @@ pub fn ee(der: &'static [u8]) -> EeFixture {
         tbs,
         sig: sig_bytes,
         serial: info.serial.to_vec(),
-        subject_key: compress_p256(info.public_key),
+        // Non-P256 subject keys (e.g. RSA fixtures used for UnsupportedKey tests) aren't a
+        // 65-byte uncompressed point; compress_p256 would panic, so fall back to a zeroed
+        // placeholder. subject_key is only asserted on for certificates that register successfully.
+        subject_key: if info.public_key.len() == 65 && info.public_key[0] == 0x04 {
+            compress_p256(info.public_key)
+        } else {
+            [0u8; 33]
+        },
     }
 }
 
