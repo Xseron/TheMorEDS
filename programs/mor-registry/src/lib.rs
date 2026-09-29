@@ -34,4 +34,8 @@ pub mod mor_registry {
             ctx, kind, pubkey, spki_hash, subject_dn_hash, name, country,
         )
     }
+
+    pub fn register_certificate(ctx: Context<RegisterCertificate>, serial: Vec<u8>) -> Result<()> {
+        crate::instructions::register_certificate::handle_register_certificate(ctx, serial)
+    }
 }

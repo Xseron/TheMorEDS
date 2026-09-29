@@ -13,6 +13,7 @@ use {
     },
     mor_registry::{error::MorError, state::TrustKind, x509},
     p256::{
+        ecdsa::Signature,
         elliptic_curve::{ops::Reduce, PrimeField},
         Scalar, U256,
     },
@@ -292,4 +293,62 @@ pub fn high_s(sig: &[u8; 64]) -> [u8; 64] {
     let mut out = *sig;
     out[32..].copy_from_slice(&neg.to_repr());
     out
+}
+
+pub struct EeFixture {
+    pub der: &'static [u8],
+    pub tbs: &'static [u8],
+    /// r‖s big-endian, low-S.
+    pub sig: [u8; 64],
+    pub serial: Vec<u8>,
+    pub subject_key: [u8; 33],
+}
+
+pub fn ee(der: &'static [u8]) -> EeFixture {
+    let (tbs, sig_der) = x509::split_certificate(der).unwrap();
+    let sig = Signature::from_der(sig_der).unwrap();
+    let sig = sig.normalize_s().unwrap_or(sig);
+    let info = x509::parse_tbs(tbs).unwrap();
+    let mut sig_bytes = [0u8; 64];
+    sig_bytes.copy_from_slice(&sig.to_bytes());
+    EeFixture {
+        der,
+        tbs,
+        sig: sig_bytes,
+        serial: info.serial.to_vec(),
+        subject_key: compress_p256(info.public_key),
+    }
+}
+
+pub fn tx_size(env: &Env, payer: &Keypair, ixs: &[Instruction]) -> usize {
+    let blockhash = env.svm.latest_blockhash();
+    let msg = Message::new_with_blockhash(ixs, Some(&payer.pubkey()), &blockhash);
+    let tx = VersionedTransaction::try_new(VersionedMessage::Legacy(msg), &[payer]).unwrap();
+    bincode::serialize(&tx).unwrap().len()
+}
+
+impl Env {
+    pub fn register_ix(&self, trust: &Pubkey, payer: &Pubkey, serial_arg: &[u8]) -> Instruction {
+        Instruction::new_with_bytes(
+            self.program_id,
+            &mor_registry::instruction::RegisterCertificate { serial: serial_arg.to_vec() }.data(),
+            mor_registry::accounts::RegisterCertificate {
+                payer: *payer,
+                trust_service: *trust,
+                certificate: self.cert_pda(trust, serial_arg),
+                instructions: solana_instructions_sysvar::ID,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    pub fn register(&mut self, trust: &Pubkey, ca_pubkey: &[u8; 33], ee: &EeFixture) -> TxResult {
+        let payer = self.payer.insecure_clone();
+        let ixs = [
+            secp256r1_ix(ca_pubkey, &ee.sig, ee.tbs),
+            self.register_ix(trust, &payer.pubkey(), &ee.serial),
+        ];
+        self.send(&payer, &[], &ixs)
+    }
 }
