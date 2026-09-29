@@ -24,17 +24,26 @@ import {
   type Instruction,
   type KeyPairSigner,
 } from '@solana/kit';
-import { compressP256, parseCertificate, signatureToLowS } from './der.js';
+import { compressP256, parseCertificate, signatureToLowS, subjectPolicyViolation } from './der.js';
 import * as ix from './anchor.js';
 
 const ROOT = join(import.meta.dirname, '..', '..', '..');
 const RPC = process.env.RPC_URL ?? 'https://api.devnet.solana.com';
 const WS = process.env.WS_URL ?? 'wss://api.devnet.solana.com';
+const EE_CERT = join(ROOT, 'fixtures/ee_large.der');
 
 const sha256 = (b: Uint8Array) => new Uint8Array(createHash('sha256').update(b).digest());
 const loadKeypair = (p: string) => createKeyPairSignerFromBytes(new Uint8Array(JSON.parse(readFileSync(p, 'utf8'))));
 
 async function main() {
+  // TBS едет в транзакции целиком, и даже отклонённая программой транзакция остаётся в леджере.
+  // Поэтому subject проверяется здесь, до любого RPC-запроса; NaturalPersonCert в программе — страховка.
+  const ee = parseCertificate(new Uint8Array(readFileSync(EE_CERT)));
+  const violation = subjectPolicyViolation(ee.subject);
+  if (violation) {
+    throw new Error(`refusing to send ${EE_CERT}: ${violation}. Only legal-person (seal) certificates are accepted.`);
+  }
+
   const rpc = createSolanaRpc(RPC);
   const rpcSubscriptions = createSolanaRpcSubscriptions(WS);
   const sendAndConfirm = sendAndConfirmTransactionFactory({ rpc, rpcSubscriptions });
@@ -91,8 +100,7 @@ async function main() {
       }),
     ]);
 
-  // 3. register_certificate большого сертификата v1-транзакцией
-  const ee = parseCertificate(new Uint8Array(readFileSync(join(ROOT, 'fixtures/ee_large.der'))));
+  // 3. register_certificate большого сертификата v1-транзакцией (subject проверен в начале main)
   const certificate = await pda(['cert', new Uint8Array(enc.encode(trustService)), ee.serial]);
   if (await exists(certificate)) {
     console.log('certificate already registered', certificate);
@@ -126,6 +134,7 @@ async function main() {
     const size = getTransactionEncoder().encode(tx).length;
     console.log(`v1 transaction: ${size} bytes (TBS ${ee.tbs.length} bytes)`);
     if (size <= 1232) throw new Error('expected a transaction larger than the legacy limit');
+    // Preflight-симуляция остаётся включённой: skipPreflight не передаём.
     await sendAndConfirm(tx as Parameters<typeof sendAndConfirm>[0], { commitment: 'confirmed' });
     const sig = getSignatureFromTransaction(tx);
     console.log(`register_certificate: ${sig}`);

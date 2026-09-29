@@ -1,5 +1,6 @@
 // Минимальный DER: ровно то, что нужно, чтобы вытащить из сертификата TBS, подпись,
-// серийный номер, issuer и SubjectPublicKeyInfo. Зеркало programs/mor-registry/src/x509.rs.
+// серийный номер, issuer и SubjectPublicKeyInfo и проверить subject до отправки.
+// Зеркало programs/mor-registry/src/x509.rs.
 
 export type Tlv = { tag: number; body: Uint8Array; raw: Uint8Array; rest: Uint8Array };
 
@@ -64,6 +65,43 @@ export function parseCertificate(der: Uint8Array): CertParts {
     spki: spki.raw,
     publicKey: keyBits.body.subarray(1),
   };
+}
+
+// Политика subject — та же, что в программе (x509.rs, evaluate_certificate): печать юрлица
+// с O и organizationIdentifier, без атрибутов физлица. OID — DER-содержимое в hex.
+const OID_O = '55040a'; // 2.5.4.10 organizationName
+const OID_ORG_ID = '550461'; // 2.5.4.97 organizationIdentifier
+const PERSON_ATTRS: Record<string, string> = {
+  '550404': 'surname (2.5.4.4)',
+  '55042a': 'givenName (2.5.4.42)',
+  '550405': 'serialNumber (2.5.4.5)',
+  '550441': 'pseudonym (2.5.4.65)',
+};
+
+const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+
+/** Почему сертификат с таким subject (полный TLV Name) нельзя отправлять в сеть; null — можно. */
+export function subjectPolicyViolation(subject: Uint8Array): string | null {
+  const name = expect(subject, 0x30);
+  if (name.rest.length !== 0) throw new Error('DER: trailing bytes after Name');
+  const oids = new Set<string>();
+  for (let rdns = name.body; rdns.length > 0; ) {
+    const rdn = expect(rdns, 0x31);
+    rdns = rdn.rest;
+    for (let atvs = rdn.body; atvs.length > 0; ) {
+      const atv = expect(atvs, 0x30);
+      atvs = atv.rest;
+      oids.add(hex(expect(atv.body, 0x06).body));
+    }
+  }
+  const person = Object.keys(PERSON_ATTRS).filter((oid) => oids.has(oid));
+  if (person.length > 0) {
+    return `subject contains natural-person attributes: ${person.map((oid) => PERSON_ATTRS[oid]).join(', ')}`;
+  }
+  if (!oids.has(OID_O) || !oids.has(OID_ORG_ID)) {
+    return 'subject lacks organizationName (2.5.4.10) or organizationIdentifier (2.5.4.97)';
+  }
+  return null;
 }
 
 const P256_N = BigInt('0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551');
