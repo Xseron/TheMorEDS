@@ -90,6 +90,16 @@ pub fn evaluate_certificate<'a>(tbs: &'a [u8], now: i64, issuer_dn_hash: &[u8; 3
             && info.public_key[0] == 0x04,
         MorError::UnsupportedKey
     );
+    // Только конечный сертификат для подписи: не УЦ и не sub-CA (CA:TRUE, keyCertSign, cRLSign),
+    // keyUsage обязателен и разрешает подпись, незнакомых критичных расширений нет (RFC 5280 §4.2).
+    let signing = KU_DIGITAL_SIGNATURE | KU_NON_REPUDIATION;
+    let issuing = KU_KEY_CERT_SIGN | KU_CRL_SIGN;
+    require!(
+        !info.ca
+            && !info.unknown_critical
+            && info.key_usage.is_some_and(|ku| ku & signing != 0 && ku & issuing == 0),
+        MorError::NotEndEntity
+    );
     let (org_name, org_id) = match (info.org_name, info.org_id) {
         (Some(name), Some(id)) => (name, id),
         _ => return err!(MorError::MissingOrgAttributes),
@@ -198,6 +208,52 @@ mod tests {
     #[test]
     fn rejects_natural_person() {
         expect_err(evaluate_certificate(tbs(EE_PERSON), now(), &ca1_dn_hash()), MorError::NaturalPersonCert);
+    }
+
+    #[test]
+    fn rejects_ca_certificate() {
+        // Сертификат самого УЦ проходит все проверки субъекта (O, organizationIdentifier, P-256),
+        // но это CA:TRUE с keyCertSign/cRLSign, а не печать организации.
+        expect_err(evaluate_certificate(tbs(CA1), now(), &ca1_dn_hash()), MorError::NotEndEntity);
+    }
+
+    #[test]
+    fn end_entity_policy_on_extensions() {
+        use x509::test_der::{basic_constraints, extension, extensions, key_usage, replace_extensions};
+        let ku = |unused: u8, bits: u8| extension(OID_KEY_USAGE, true, &key_usage(unused, &[bits]));
+        let bc = |ca: bool| extension(OID_BASIC_CONSTRAINTS, true, &basic_constraints(ca));
+        let unknown_critical = extension(&[0x2a, 0x03, 0x04], true, &[0x05, 0x00]);
+        let unknown_non_critical = extension(&[0x2a, 0x03, 0x04], false, &[0x05, 0x00]);
+        let with = |exts: Vec<Vec<u8>>| {
+            let tail = if exts.is_empty() { vec![] } else { extensions(&exts) };
+            replace_extensions(tbs(EE_SMALL), &tail)
+        };
+
+        let accepted = [
+            ("digitalSignature", vec![ku(7, 0x80)]),
+            ("nonRepudiation", vec![ku(6, 0x40)]),
+            ("CA:FALSE, digitalSignature + nonRepudiation", vec![bc(false), ku(6, 0xc0)]),
+            ("unknown non-critical extension", vec![ku(6, 0x40), unknown_non_critical]),
+        ];
+        for (why, exts) in accepted {
+            let t = with(exts);
+            assert!(evaluate_certificate(&t, now(), &ca1_dn_hash()).is_ok(), "{why} must be accepted");
+        }
+
+        let rejected = [
+            ("no extensions", vec![]),
+            ("keyUsage absent", vec![bc(false)]),
+            ("keyEncipherment only", vec![ku(5, 0x20)]),
+            ("digitalSignature + keyCertSign", vec![ku(2, 0x84)]),
+            ("nonRepudiation + cRLSign", vec![ku(1, 0x42)]),
+            ("CA:TRUE", vec![bc(true), ku(6, 0x40)]),
+            ("unknown critical extension", vec![ku(6, 0x40), unknown_critical]),
+        ];
+        for (why, exts) in rejected {
+            let t = with(exts);
+            let err = evaluate_certificate(&t, now(), &ca1_dn_hash()).err().unwrap_or_else(|| panic!("{why} must fail"));
+            assert_eq!(code(err), u32::from(MorError::NotEndEntity), "{why}");
+        }
     }
 
     #[test]

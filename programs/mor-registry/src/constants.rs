@@ -25,3 +25,16 @@ pub const OID_ORG_ID: &[u8] = &[0x55, 0x04, 0x61]; // 2.5.4.97 organizationIdent
 pub const OID_SURNAME: &[u8] = &[0x55, 0x04, 0x04]; // 2.5.4.4
 pub const OID_GIVEN_NAME: &[u8] = &[0x55, 0x04, 0x2a]; // 2.5.4.42
 pub const OID_SERIAL_NUMBER: &[u8] = &[0x55, 0x04, 0x05]; // 2.5.4.5
+
+// Расширения X.509 (RFC 5280 §4.2.1).
+pub const OID_KEY_USAGE: &[u8] = &[0x55, 0x1d, 0x0f]; // 2.5.29.15
+pub const OID_BASIC_CONSTRAINTS: &[u8] = &[0x55, 0x1d, 0x13]; // 2.5.29.19
+pub const OID_EXT_KEY_USAGE: &[u8] = &[0x55, 0x1d, 0x25]; // 2.5.29.37
+pub const OID_CERT_POLICIES: &[u8] = &[0x55, 0x1d, 0x20]; // 2.5.29.32
+pub const OID_SUBJECT_ALT_NAME: &[u8] = &[0x55, 0x1d, 0x11]; // 2.5.29.17
+
+// Биты KeyUsage: именованный бит n — это 1 << n.
+pub const KU_DIGITAL_SIGNATURE: u16 = 1 << 0;
+pub const KU_NON_REPUDIATION: u16 = 1 << 1; // contentCommitment
+pub const KU_KEY_CERT_SIGN: u16 = 1 << 5;
+pub const KU_CRL_SIGN: u16 = 1 << 6;

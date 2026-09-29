@@ -154,3 +154,12 @@ fn precompile_rejects_tampered_tbs_and_high_s() {
     let err = env.send(&payer, &[], &ixs).expect_err("high-S must fail");
     assert_eq!(failed_ix(&err).map(|(ix, _)| ix), Some(0), "must fail in the precompile: {:?}", err.err);
 }
+
+// 12. Сертификат самого УЦ: подпись, issuer, ключ и O/organizationIdentifier в порядке,
+// но это CA:TRUE с keyCertSign — не печать организации.
+#[test]
+fn rejects_ca_certificate_as_end_entity() {
+    let (mut env, ca, trust) = env_with_ca1();
+    let res = env.register(&trust, &ca.pubkey, &ee(CA1));
+    assert_mor_err(&res, MorError::NotEndEntity, 1);
+}

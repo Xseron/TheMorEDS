@@ -12,8 +12,10 @@ pub enum X509Error {
 
 type R<T> = Result<T, X509Error>;
 
+const TAG_BOOLEAN: u8 = 0x01;
 const TAG_INTEGER: u8 = 0x02;
 const TAG_BIT_STRING: u8 = 0x03;
+const TAG_OCTET_STRING: u8 = 0x04;
 const TAG_OID: u8 = 0x06;
 const TAG_UTF8_STRING: u8 = 0x0c;
 const TAG_PRINTABLE_STRING: u8 = 0x13;
@@ -22,6 +24,7 @@ const TAG_GENERALIZED_TIME: u8 = 0x18;
 const TAG_SEQUENCE: u8 = 0x30;
 const TAG_SET: u8 = 0x31;
 const TAG_VERSION: u8 = 0xa0; // [0] EXPLICIT
+const TAG_EXTENSIONS: u8 = 0xa3; // [3] EXPLICIT
 
 /// Один элемент DER: тег, содержимое и полные байты (для хэшей).
 #[derive(Clone, Copy, Debug)]
@@ -111,6 +114,12 @@ pub struct TbsInfo<'a> {
     pub country: Option<[u8; 2]>,
     /// В subject есть surname, givenName или serialNumber.
     pub has_person_attrs: bool,
+    /// basicConstraints cA; false, если расширения нет.
+    pub ca: bool,
+    /// Биты KeyUsage (бит n — `1 << n`); None, если расширения нет.
+    pub key_usage: Option<u16>,
+    /// Есть критичное расширение, которое реестр не знает.
+    pub unknown_critical: bool,
 }
 
 /// TBSCertificate ::= SEQUENCE { version [0] EXPLICIT OPTIONAL, serialNumber, signature,
@@ -138,7 +147,8 @@ pub fn parse_tbs(tbs: &[u8]) -> R<TbsInfo<'_>> {
         return Err(X509Error::Malformed);
     }
     let (subject, cur) = expect(cur, TAG_SEQUENCE)?;
-    let (spki, _extensions) = expect(cur, TAG_SEQUENCE)?;
+    let (spki, after_spki) = expect(cur, TAG_SEQUENCE)?;
+    let ext = parse_extensions(after_spki)?;
 
     let (alg, s_rest) = expect(spki.body, TAG_SEQUENCE)?;
     let (key_bits, s_rest) = expect(s_rest, TAG_BIT_STRING)?;
@@ -167,7 +177,139 @@ pub fn parse_tbs(tbs: &[u8]) -> R<TbsInfo<'_>> {
         org_id: attrs.org_id,
         country: attrs.country,
         has_person_attrs: attrs.has_person_attrs,
+        ca: ext.ca,
+        key_usage: ext.key_usage,
+        unknown_critical: ext.unknown_critical,
     })
+}
+
+#[derive(Default)]
+struct Extensions {
+    ca: bool,
+    key_usage: Option<u16>,
+    unknown_critical: bool,
+}
+
+/// Хвост TBS после SubjectPublicKeyInfo: пусто или ровно `[3] EXPLICIT Extensions`, где
+/// Extensions ::= SEQUENCE SIZE (1..MAX) OF Extension,
+/// Extension ::= SEQUENCE { extnID OID, critical BOOLEAN DEFAULT FALSE, extnValue OCTET STRING }.
+/// issuerUniqueID/subjectUniqueID (v2, RFC 5280 запрещает их выпускать) и любой другой хвост — Malformed.
+fn parse_extensions(after_spki: &[u8]) -> R<Extensions> {
+    let mut out = Extensions::default();
+    if after_spki.is_empty() {
+        return Ok(out);
+    }
+    let (wrapper, rest) = expect(after_spki, TAG_EXTENSIONS)?;
+    if !rest.is_empty() {
+        return Err(X509Error::Malformed);
+    }
+    let (list, rest) = expect(wrapper.body, TAG_SEQUENCE)?;
+    if !rest.is_empty() || list.body.is_empty() {
+        return Err(X509Error::Malformed);
+    }
+    let mut seen_basic_constraints = false;
+    let mut body = list.body;
+    while !body.is_empty() {
+        let (ext, rest) = expect(body, TAG_SEQUENCE)?;
+        body = rest;
+        let (oid, e_rest) = expect(ext.body, TAG_OID)?;
+        let (critical, e_rest) = match e_rest.first() {
+            Some(&TAG_BOOLEAN) => {
+                let (flag, e_rest) = read_tlv(e_rest)?;
+                (boolean(flag)?, e_rest)
+            }
+            _ => (false, e_rest),
+        };
+        let (value, e_rest) = expect(e_rest, TAG_OCTET_STRING)?;
+        if !e_rest.is_empty() {
+            return Err(X509Error::Malformed);
+        }
+        let oid = oid.body;
+        // Повтор расширения запрещён RFC 5280 и сделал бы результат зависимым от порядка.
+        if oid == OID_BASIC_CONSTRAINTS {
+            if seen_basic_constraints {
+                return Err(X509Error::Malformed);
+            }
+            seen_basic_constraints = true;
+            out.ca = basic_constraints_ca(value.body)?;
+        } else if oid == OID_KEY_USAGE {
+            if out.key_usage.is_some() {
+                return Err(X509Error::Malformed);
+            }
+            out.key_usage = Some(key_usage_bits(value.body)?);
+        } else if critical
+            && oid != OID_EXT_KEY_USAGE
+            && oid != OID_CERT_POLICIES
+            && oid != OID_SUBJECT_ALT_NAME
+        {
+            out.unknown_critical = true;
+        }
+    }
+    Ok(out)
+}
+
+/// DER BOOLEAN: FF — истина, 00 — ложь (явный FALSE вместо DEFAULT выпускают некоторые УЦ,
+/// читается он однозначно). Другие значения и длины — Malformed.
+fn boolean(tlv: Tlv<'_>) -> R<bool> {
+    match (tlv.tag, tlv.body) {
+        (TAG_BOOLEAN, [0xff]) => Ok(true),
+        (TAG_BOOLEAN, [0x00]) => Ok(false),
+        _ => Err(X509Error::Malformed),
+    }
+}
+
+/// BasicConstraints ::= SEQUENCE { cA BOOLEAN DEFAULT FALSE, pathLenConstraint INTEGER OPTIONAL }.
+fn basic_constraints_ca(value: &[u8]) -> R<bool> {
+    let (seq, rest) = expect(value, TAG_SEQUENCE)?;
+    if !rest.is_empty() {
+        return Err(X509Error::Malformed);
+    }
+    let mut cur = seq.body;
+    let mut ca = false;
+    if cur.first() == Some(&TAG_BOOLEAN) {
+        let (flag, rest) = read_tlv(cur)?;
+        ca = boolean(flag)?;
+        cur = rest;
+    }
+    if cur.first() == Some(&TAG_INTEGER) {
+        let (path_len, rest) = read_tlv(cur)?;
+        if path_len.body.is_empty() {
+            return Err(X509Error::Malformed);
+        }
+        cur = rest;
+    }
+    if !cur.is_empty() {
+        return Err(X509Error::Malformed);
+    }
+    Ok(ca)
+}
+
+/// KeyUsage ::= BIT STRING; именованные биты 0..8 умещаются в 2 байта. Бит n (0 — старший бит
+/// первого байта) → `1 << n`. Неиспользуемых битов 0..7, при пустом содержимом — 0, и сами
+/// неиспользуемые биты должны быть нулями (DER).
+fn key_usage_bits(value: &[u8]) -> R<u16> {
+    let (bits, rest) = expect(value, TAG_BIT_STRING)?;
+    if !rest.is_empty() {
+        return Err(X509Error::Malformed);
+    }
+    let (&unused, bytes) = bits.body.split_first().ok_or(X509Error::Malformed)?;
+    if unused > 7 || bytes.len() > 2 || (bytes.is_empty() && unused != 0) {
+        return Err(X509Error::Malformed);
+    }
+    if let Some(last) = bytes.last() {
+        if last & ((1u8 << unused) - 1) != 0 {
+            return Err(X509Error::Malformed);
+        }
+    }
+    let mut out = 0u16;
+    for (i, byte) in bytes.iter().enumerate() {
+        for k in 0..8 {
+            if byte & (0x80 >> k) != 0 {
+                out |= 1 << (i * 8 + k);
+            }
+        }
+    }
+    Ok(out)
 }
 
 struct SubjectAttrs<'a> {
@@ -380,6 +522,132 @@ mod tests {
     }
 
     #[test]
+    fn reads_end_entity_extensions() {
+        for der in [EE_SMALL, EE_LARGE] {
+            let t = tbs(der);
+            assert!(!t.ca);
+            assert_eq!(t.key_usage, Some(KU_NON_REPUDIATION));
+            assert!(!t.unknown_critical);
+        }
+    }
+
+    #[test]
+    fn reads_ca_extensions() {
+        let t = tbs(CA1);
+        assert!(t.ca);
+        assert_eq!(t.key_usage, Some(KU_KEY_CERT_SIGN | KU_CRL_SIGN));
+        assert!(!t.unknown_critical);
+    }
+
+    const OID_UNKNOWN: &[u8] = &[0x2a, 0x03, 0x04]; // 1.2.3.4
+    const NULL: &[u8] = &[0x05, 0x00];
+
+    #[test]
+    fn absent_extensions_mean_not_ca_and_no_key_usage() {
+        let e = parse_extensions(&[]).unwrap();
+        assert!(!e.ca);
+        assert_eq!(e.key_usage, None);
+        assert!(!e.unknown_critical);
+    }
+
+    #[test]
+    fn flags_only_unknown_critical_extensions() {
+        let ku = test_der::extension(OID_KEY_USAGE, true, &test_der::key_usage(6, &[0x40]));
+        let crit = |oid: &[u8]| test_der::extensions(&[ku.clone(), test_der::extension(oid, true, NULL)]);
+        assert!(parse_extensions(&crit(OID_UNKNOWN)).unwrap().unknown_critical);
+        for known in [OID_EXT_KEY_USAGE, OID_CERT_POLICIES, OID_SUBJECT_ALT_NAME] {
+            assert!(!parse_extensions(&crit(known)).unwrap().unknown_critical);
+        }
+        let non_critical = test_der::extensions(&[ku.clone(), test_der::extension(OID_UNKNOWN, false, NULL)]);
+        assert!(!parse_extensions(&non_critical).unwrap().unknown_critical);
+        // critical FALSE, закодированный явно, читается как «не критично».
+        let mut explicit_false = test_der::tlv(TAG_OID, OID_UNKNOWN);
+        explicit_false.extend([TAG_BOOLEAN, 0x01, 0x00]);
+        explicit_false.extend(test_der::tlv(TAG_OCTET_STRING, NULL));
+        let blob = test_der::extensions(&[ku, test_der::tlv(TAG_SEQUENCE, &explicit_false)]);
+        assert!(!parse_extensions(&blob).unwrap().unknown_critical);
+    }
+
+    #[test]
+    fn reads_basic_constraints() {
+        let bc = |value: &[u8]| {
+            parse_extensions(&test_der::extensions(&[test_der::extension(OID_BASIC_CONSTRAINTS, true, value)]))
+        };
+        assert!(bc(&test_der::basic_constraints(true)).unwrap().ca);
+        assert!(!bc(&test_der::basic_constraints(false)).unwrap().ca);
+        assert!(bc(&[0x30, 0x06, 0x01, 0x01, 0xff, 0x02, 0x01, 0x00]).unwrap().ca, "with pathLenConstraint");
+        assert!(!bc(&[0x30, 0x03, 0x01, 0x01, 0x00]).unwrap().ca, "explicit FALSE");
+        assert_eq!(bc(&[0x30, 0x03, 0x01, 0x01, 0x01]).err(), Some(X509Error::Malformed), "non-DER TRUE");
+        assert_eq!(bc(&[0x30, 0x05, 0x01, 0x01, 0xff, 0x05, 0x00]).err(), Some(X509Error::Malformed), "junk inside");
+        assert_eq!(bc(&[0x30, 0x00, 0x00]).err(), Some(X509Error::Malformed), "trailing byte");
+    }
+
+    #[test]
+    fn decodes_key_usage_bits() {
+        let ku = |unused: u8, bits: &[u8]| {
+            parse_extensions(&test_der::extensions(&[test_der::extension(
+                OID_KEY_USAGE,
+                true,
+                &test_der::key_usage(unused, bits),
+            )]))
+            .map(|e| e.key_usage)
+        };
+        assert_eq!(ku(7, &[0x80]), Ok(Some(KU_DIGITAL_SIGNATURE)));
+        assert_eq!(ku(6, &[0x40]), Ok(Some(KU_NON_REPUDIATION)));
+        assert_eq!(ku(6, &[0xc0]), Ok(Some(KU_DIGITAL_SIGNATURE | KU_NON_REPUDIATION)));
+        assert_eq!(ku(1, &[0x06]), Ok(Some(KU_KEY_CERT_SIGN | KU_CRL_SIGN)));
+        assert_eq!(ku(7, &[0x80, 0x80]), Ok(Some(KU_DIGITAL_SIGNATURE | 1 << 8)), "decipherOnly is bit 8");
+        assert_eq!(ku(0, &[]), Ok(Some(0)));
+        assert_eq!(ku(8, &[0x80]), Err(X509Error::Malformed), "unused > 7");
+        assert_eq!(ku(6, &[0x41]), Err(X509Error::Malformed), "padding bit set");
+        assert_eq!(ku(1, &[]), Err(X509Error::Malformed), "unused bits without content");
+        assert_eq!(ku(0, &[0x80, 0x00, 0x01]), Err(X509Error::Malformed), "more than 16 bits");
+    }
+
+    #[test]
+    fn rejects_malformed_extensions() {
+        let ku = test_der::extension(OID_KEY_USAGE, true, &test_der::key_usage(6, &[0x40]));
+        let bc = test_der::extension(OID_BASIC_CONSTRAINTS, true, &test_der::basic_constraints(false));
+        let good = test_der::extensions(&[bc.clone(), ku.clone()]);
+        assert!(parse_extensions(&good).is_ok());
+
+        let mut trailing = good.clone();
+        trailing.extend(NULL);
+        assert_eq!(parse_extensions(&trailing).err(), Some(X509Error::Malformed), "bytes after extensions");
+        let unique_id = [0x81, 0x02, 0x00, 0x00];
+        assert_eq!(parse_extensions(&unique_id).err(), Some(X509Error::Malformed), "not [3]");
+        let empty = test_der::tlv(TAG_EXTENSIONS, &test_der::tlv(TAG_SEQUENCE, &[]));
+        assert_eq!(parse_extensions(&empty).err(), Some(X509Error::Malformed), "empty SEQUENCE OF");
+        let dup_ku = test_der::extensions(&[ku.clone(), ku.clone()]);
+        assert_eq!(parse_extensions(&dup_ku).err(), Some(X509Error::Malformed), "duplicate keyUsage");
+        let dup_bc = test_der::extensions(&[bc.clone(), bc.clone(), ku.clone()]);
+        assert_eq!(parse_extensions(&dup_bc).err(), Some(X509Error::Malformed), "duplicate basicConstraints");
+        let no_value = test_der::extensions(&[test_der::tlv(TAG_SEQUENCE, &test_der::tlv(TAG_OID, OID_UNKNOWN))]);
+        assert_eq!(parse_extensions(&no_value).err(), Some(X509Error::Malformed), "no extnValue");
+        let mut bad_bool = test_der::tlv(TAG_OID, OID_UNKNOWN);
+        bad_bool.extend([TAG_BOOLEAN, 0x01, 0x01]);
+        bad_bool.extend(test_der::tlv(TAG_OCTET_STRING, NULL));
+        let bad_bool = test_der::extensions(&[test_der::tlv(TAG_SEQUENCE, &bad_bool)]);
+        assert_eq!(parse_extensions(&bad_bool).err(), Some(X509Error::Malformed), "critical is not 00/FF");
+        let mut ku_junk = test_der::key_usage(6, &[0x40]);
+        ku_junk.extend(NULL);
+        let ku_junk = test_der::extensions(&[test_der::extension(OID_KEY_USAGE, true, &ku_junk)]);
+        assert_eq!(parse_extensions(&ku_junk).err(), Some(X509Error::Malformed), "junk after KeyUsage");
+        let truncated = &good[..good.len() - 1];
+        assert_eq!(parse_extensions(truncated).err(), Some(X509Error::Malformed), "truncated");
+    }
+
+    #[test]
+    fn parse_tbs_rejects_bytes_after_extensions() {
+        let (tbs_der, _) = split_certificate(EE_SMALL).unwrap();
+        let (seq, _) = read_tlv(tbs_der).unwrap();
+        let mut body = seq.body.to_vec();
+        body.extend(NULL);
+        let tampered = test_der::tlv(TAG_SEQUENCE, &body);
+        assert_eq!(parse_tbs(&tampered).err(), Some(X509Error::Malformed));
+    }
+
+    #[test]
     fn rejects_field_over_limit() {
         // O длиной 129 байт: SEQUENCE { SET { SEQUENCE { OID 2.5.4.10, UTF8String(129) } } }
         let mut atv = vec![0x06, 0x03, 0x55, 0x04, 0x0a, 0x0c, 0x81, 0x81];
@@ -387,5 +655,57 @@ mod tests {
         let mut set = vec![0x31, 0x81, (atv.len() + 3) as u8, 0x30, 0x81, atv.len() as u8];
         set.extend(atv);
         assert_eq!(parse_subject(&set).err(), Some(X509Error::FieldTooLong));
+    }
+}
+
+/// DER-конструктор для тестов: собирает расширения и TBS с подменённым хвостом.
+#[cfg(test)]
+pub(crate) mod test_der {
+    use super::*;
+
+    /// TLV с длиной в короткой или длинной (до 2 байт) форме.
+    pub fn tlv(tag: u8, body: &[u8]) -> Vec<u8> {
+        let mut out = vec![tag];
+        match body.len() {
+            n if n < 0x80 => out.push(n as u8),
+            n if n <= 0xff => out.extend([0x81, n as u8]),
+            n => out.extend([0x82, (n >> 8) as u8, n as u8]),
+        }
+        out.extend_from_slice(body);
+        out
+    }
+
+    /// Extension ::= SEQUENCE { extnID, critical BOOLEAN DEFAULT FALSE, extnValue OCTET STRING }.
+    pub fn extension(oid: &[u8], critical: bool, value: &[u8]) -> Vec<u8> {
+        let mut body = tlv(TAG_OID, oid);
+        if critical {
+            body.extend([TAG_BOOLEAN, 0x01, 0xff]);
+        }
+        body.extend(tlv(TAG_OCTET_STRING, value));
+        tlv(TAG_SEQUENCE, &body)
+    }
+
+    /// [3] EXPLICIT SEQUENCE OF Extension.
+    pub fn extensions(list: &[Vec<u8>]) -> Vec<u8> {
+        tlv(TAG_EXTENSIONS, &tlv(TAG_SEQUENCE, &list.concat()))
+    }
+
+    /// Значение KeyUsage: BIT STRING с указанным числом неиспользуемых битов.
+    pub fn key_usage(unused: u8, bits: &[u8]) -> Vec<u8> {
+        tlv(TAG_BIT_STRING, &[&[unused][..], bits].concat())
+    }
+
+    /// Значение BasicConstraints: CA:TRUE — `30 03 01 01 FF`, CA:FALSE — пустой SEQUENCE.
+    pub fn basic_constraints(ca: bool) -> Vec<u8> {
+        let body: &[u8] = if ca { &[TAG_BOOLEAN, 0x01, 0xff] } else { &[] };
+        tlv(TAG_SEQUENCE, body)
+    }
+
+    /// TBS, в котором всё после SubjectPublicKeyInfo заменено на `tail`.
+    pub fn replace_extensions(tbs: &[u8], tail: &[u8]) -> Vec<u8> {
+        let (seq, _) = read_tlv(tbs).unwrap();
+        let spki = parse_tbs(tbs).unwrap().spki;
+        let end = spki.as_ptr() as usize - seq.body.as_ptr() as usize + spki.len();
+        tlv(TAG_SEQUENCE, &[&seq.body[..end], tail].concat())
     }
 }

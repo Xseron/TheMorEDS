@@ -32,4 +32,6 @@ pub enum MorError {
     Unauthorized,
     #[msg("Trust service kind is not supported")]
     UnsupportedTrustKind,
+    #[msg("Certificate is not an end-entity signing certificate (CA, key usage or critical extension)")]
+    NotEndEntity,
 }
