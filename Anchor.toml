@@ -13,7 +13,7 @@ mor_registry = "CqbwC3DF4APG6cjRneir1UPuBbh49ttBrKasfc5QP1aP"
 mor_registry = "CqbwC3DF4APG6cjRneir1UPuBbh49ttBrKasfc5QP1aP"
 
 [provider]
-cluster = "localnet"
+cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
