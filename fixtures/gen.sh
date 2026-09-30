@@ -41,6 +41,7 @@ ec_key "$CA1_KEY"
 ec_key "$CA2_KEY"
 ec_key "$EE_KEY"
 rsa_key "$RSA_KEY"
+[ -f "$KEYS/attestor.json" ] || solana-keygen new --no-bip39-passphrase --silent --outfile "$KEYS/attestor.json"
 
 ca_cert ca1.pem "$CA1_KEY" "/C=EE/O=Mor Test QTSP/organizationIdentifier=NTREE-10000001/CN=Mor Test QTSP CA 1"
 # Тот же ключ, другой DN: для IssuerMismatch

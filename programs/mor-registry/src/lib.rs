@@ -50,4 +50,17 @@ pub mod mor_registry {
     ) -> Result<()> {
         crate::instructions::register_seal_p256::handle_register_seal_p256(ctx, kind, salt, expires_at, sign_deadline)
     }
+
+    pub fn register_seal_attested(
+        ctx: Context<RegisterSealAttested>,
+        kind: AddressKind,
+        identifier_hash: [u8; 32],
+        name: String,
+        expires_at: i64,
+        sign_deadline: i64,
+    ) -> Result<()> {
+        crate::instructions::register_seal_attested::handle_register_seal_attested(
+            ctx, kind, identifier_hash, name, expires_at, sign_deadline,
+        )
+    }
 }

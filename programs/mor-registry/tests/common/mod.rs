@@ -206,27 +206,40 @@ impl Env {
         self.initialize_as(&admin)
     }
 
-    pub fn add_trust_service_as(&mut self, signer: &Keypair, kind: TrustKind, ca: &CaFixture) -> TxResult {
+    pub fn add_trust_service_raw(
+        &mut self,
+        signer: &Keypair,
+        kind: TrustKind,
+        pubkey: [u8; 33],
+        spki_hash: [u8; 32],
+        subject_dn_hash: [u8; 32],
+        name: &str,
+        country: [u8; 2],
+    ) -> TxResult {
         let ix = Instruction::new_with_bytes(
             self.program_id,
             &mor_registry::instruction::AddTrustService {
                 kind,
-                pubkey: ca.pubkey,
-                spki_hash: ca.spki_hash,
-                subject_dn_hash: ca.dn_hash,
-                name: ca.name.to_string(),
-                country: ca.country,
+                pubkey,
+                spki_hash,
+                subject_dn_hash,
+                name: name.to_string(),
+                country,
             }
             .data(),
             mor_registry::accounts::AddTrustService {
                 admin: signer.pubkey(),
                 config: self.config_pda(),
-                trust_service: self.trust_pda(&ca.spki_hash),
+                trust_service: self.trust_pda(&spki_hash),
                 system_program: system_program::ID,
             }
             .to_account_metas(None),
         );
         self.send(signer, &[], &[ix])
+    }
+
+    pub fn add_trust_service_as(&mut self, signer: &Keypair, kind: TrustKind, ca: &CaFixture) -> TxResult {
+        self.add_trust_service_raw(signer, kind, ca.pubkey, ca.spki_hash, ca.dn_hash, ca.name, ca.country)
     }
 
     /// Регистрирует УЦ от админа, возвращает адрес TrustService.
@@ -545,5 +558,103 @@ impl Env {
     pub fn seal_p256(&mut self, r: &SealReq, controller: &Keypair) -> TxResult {
         let msg = self.p256_message(r);
         self.seal_p256_signed(r, controller, EE_KEY_PEM, &msg)
+    }
+}
+
+pub const BIN: &str = "123456789012";
+pub const ROMASHKA: &str = "ТОО «Ромашка»";
+
+/// Тестовый ключ аттестатора (fixtures/keys/attestor.json, только для тестов).
+pub fn attestor() -> Keypair {
+    solana_keypair::read_keypair_file(concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures/keys/attestor.json"))
+        .unwrap()
+}
+
+impl SealReq {
+    /// Кошелёк `controller` запечатывает сам себя через аттестатора `trust` как «ТОО «Ромашка»».
+    pub fn attested(controller: &Pubkey, trust: &Pubkey) -> SealReq {
+        SealReq {
+            kind: AddressKind::Wallet,
+            address: *controller,
+            controller: *controller,
+            program_data: None,
+            trust: *trust,
+            certificate: Pubkey::default(),
+            salt: [0; 32],
+            identifier_hash: sha256(&[&SALT[..], b"KZ", BIN.as_bytes()].concat()),
+            name: ROMASHKA.to_string(),
+            expires_at: now() + 30 * 86_400,
+            sign_deadline: now() + 600,
+        }
+    }
+}
+
+impl Env {
+    /// Регистрирует тестового аттестатора КЗ; возвращает адрес TrustService.
+    pub fn add_attestor(&mut self) -> Pubkey {
+        let kp = attestor();
+        let mut pubkey = [0u8; 33];
+        pubkey[..32].copy_from_slice(kp.pubkey().as_ref());
+        let spki = sha256(kp.pubkey().as_ref());
+        let admin = self.admin.insecure_clone();
+        self.add_trust_service_raw(&admin, TrustKind::Attestor, pubkey, spki, [0; 32], "Mor Test Attestor", *b"KZ")
+            .unwrap_or_else(|e| panic!("add attestor failed: {:?}\n{:#?}", e.err, e.meta.logs));
+        self.trust_pda(&spki)
+    }
+
+    /// Сообщение, которое подписывает аттестатор (юрисдикция — страна аттестатора, KZ).
+    pub fn attested_message(&self, r: &SealReq) -> Vec<u8> {
+        SealMessage {
+            address: &r.address,
+            address_kind: r.kind,
+            controller: &r.controller,
+            trust_level: TrustLevel::Attestor,
+            trust_service: &r.trust,
+            certificate: &Pubkey::default(),
+            jurisdiction: *b"KZ",
+            subject_type: SubjectType::LegalEntity,
+            identifier_hash: &r.identifier_hash,
+            expires_at: r.expires_at,
+            sign_deadline: r.sign_deadline,
+            name: &r.name,
+        }
+        .to_bytes()
+    }
+
+    pub fn seal_attested_ix(&self, r: &SealReq) -> Instruction {
+        Instruction::new_with_bytes(
+            self.program_id,
+            &mor_registry::instruction::RegisterSealAttested {
+                kind: r.kind,
+                identifier_hash: r.identifier_hash,
+                name: r.name.clone(),
+                expires_at: r.expires_at,
+                sign_deadline: r.sign_deadline,
+            }
+            .data(),
+            mor_registry::accounts::RegisterSealAttested {
+                controller: r.controller,
+                address: r.address,
+                program_data: r.program_data,
+                trust_service: r.trust,
+                seal: self.seal_pda(&r.address),
+                instructions: solana_instructions_sysvar::ID,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    /// [Ed25519 над `msg` ключом `signer`, register_seal_attested]; платит и подписывает контролёр.
+    pub fn seal_attested_signed(&mut self, r: &SealReq, controller: &Keypair, signer: &Keypair, msg: &[u8]) -> TxResult {
+        let sig = signer.sign_message(msg);
+        let ixs = [ed25519_ix(&signer.pubkey().to_bytes(), sig.as_ref().try_into().unwrap(), msg), self.seal_attested_ix(r)];
+        self.send(controller, &[], &ixs)
+    }
+
+    /// Честная печать через тестового аттестатора.
+    pub fn seal_attested(&mut self, r: &SealReq, controller: &Keypair) -> TxResult {
+        let msg = self.attested_message(r);
+        self.seal_attested_signed(r, controller, &attestor(), &msg)
     }
 }
