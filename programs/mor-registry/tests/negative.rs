@@ -163,3 +163,11 @@ fn rejects_ca_certificate_as_end_entity() {
     let res = env.register(&trust, &ca.pubkey, &ee(CA1));
     assert_mor_err(&res, MorError::NotEndEntity, 1);
 }
+
+// Сертификат OCSP-респондера того же УЦ: подписывает чужие данные, печатью быть не может.
+#[test]
+fn rejects_ocsp_signing_certificate() {
+    let (mut env, ca, trust) = env_with_ca1();
+    let res = env.register(&trust, &ca.pubkey, &ee(EE_OCSP));
+    assert_mor_err(&res, MorError::ForbiddenKeyPurpose, 1);
+}

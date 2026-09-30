@@ -40,6 +40,7 @@ pub const EE_WRONG_ISSUER: &[u8] = include_bytes!("../../../../fixtures/ee_wrong
 pub const EE_RSA: &[u8] = include_bytes!("../../../../fixtures/ee_rsa.der");
 pub const EE_NO_ORGID: &[u8] = include_bytes!("../../../../fixtures/ee_no_orgid.der");
 pub const EE_PERSON: &[u8] = include_bytes!("../../../../fixtures/ee_person.der");
+pub const EE_OCSP: &[u8] = include_bytes!("../../../../fixtures/ee_ocsp.der");
 
 /// (notBefore, notAfter) сертификата в unix-секундах.
 pub fn validity(der: &[u8]) -> (i64, i64) {

@@ -120,6 +120,8 @@ pub struct TbsInfo<'a> {
     pub key_usage: Option<u16>,
     /// Есть критичное расширение, которое реестр не знает.
     pub unknown_critical: bool,
+    /// extKeyUsage содержит serverAuth, timeStamping или OCSPSigning.
+    pub forbidden_purpose: bool,
 }
 
 /// TBSCertificate ::= SEQUENCE { version [0] EXPLICIT OPTIONAL, serialNumber, signature,
@@ -180,6 +182,7 @@ pub fn parse_tbs(tbs: &[u8]) -> R<TbsInfo<'_>> {
         ca: ext.ca,
         key_usage: ext.key_usage,
         unknown_critical: ext.unknown_critical,
+        forbidden_purpose: ext.forbidden_purpose,
     })
 }
 
@@ -188,6 +191,7 @@ struct Extensions {
     ca: bool,
     key_usage: Option<u16>,
     unknown_critical: bool,
+    forbidden_purpose: bool,
 }
 
 /// Хвост TBS после SubjectPublicKeyInfo: пусто или ровно `[3] EXPLICIT Extensions`, где
@@ -208,6 +212,7 @@ fn parse_extensions(after_spki: &[u8]) -> R<Extensions> {
         return Err(X509Error::Malformed);
     }
     let mut seen_basic_constraints = false;
+    let mut seen_ext_key_usage = false;
     let mut body = list.body;
     while !body.is_empty() {
         let (ext, rest) = expect(body, TAG_SEQUENCE)?;
@@ -237,11 +242,13 @@ fn parse_extensions(after_spki: &[u8]) -> R<Extensions> {
                 return Err(X509Error::Malformed);
             }
             out.key_usage = Some(key_usage_bits(value.body)?);
-        } else if critical
-            && oid != OID_EXT_KEY_USAGE
-            && oid != OID_CERT_POLICIES
-            && oid != OID_SUBJECT_ALT_NAME
-        {
+        } else if oid == OID_EXT_KEY_USAGE {
+            if seen_ext_key_usage {
+                return Err(X509Error::Malformed);
+            }
+            seen_ext_key_usage = true;
+            out.forbidden_purpose = ext_key_usage_forbidden(value.body)?;
+        } else if critical && oid != OID_CERT_POLICIES && oid != OID_SUBJECT_ALT_NAME {
             out.unknown_critical = true;
         }
     }
@@ -282,6 +289,25 @@ fn basic_constraints_ca(value: &[u8]) -> R<bool> {
         return Err(X509Error::Malformed);
     }
     Ok(ca)
+}
+
+/// ExtKeyUsageSyntax ::= SEQUENCE SIZE (1..MAX) OF KeyPurposeId (OID).
+/// true, если среди назначений есть serverAuth, timeStamping или OCSPSigning.
+fn ext_key_usage_forbidden(value: &[u8]) -> R<bool> {
+    let (seq, rest) = expect(value, TAG_SEQUENCE)?;
+    if !rest.is_empty() || seq.body.is_empty() {
+        return Err(X509Error::Malformed);
+    }
+    let mut body = seq.body;
+    let mut forbidden = false;
+    while !body.is_empty() {
+        let (oid, rest) = expect(body, TAG_OID)?;
+        body = rest;
+        if oid.body == OID_KP_SERVER_AUTH || oid.body == OID_KP_TIME_STAMPING || oid.body == OID_KP_OCSP_SIGNING {
+            forbidden = true;
+        }
+    }
+    Ok(forbidden)
 }
 
 /// KeyUsage ::= BIT STRING; именованные биты 0..8 умещаются в 2 байта. Бит n (0 — старший бит
@@ -564,12 +590,32 @@ mod tests {
         assert!(!e.unknown_critical);
     }
 
+    const OID_KP_CLIENT_AUTH: &[u8] = &[0x2b, 0x06, 0x01, 0x05, 0x05, 0x07, 0x03, 0x02]; // 1.3.6.1.5.5.7.3.2
+    const OID_KP_EMAIL_PROTECTION: &[u8] = &[0x2b, 0x06, 0x01, 0x05, 0x05, 0x07, 0x03, 0x04]; // 1.3.6.1.5.5.7.3.4
+
+    #[test]
+    fn flags_forbidden_key_purposes_only() {
+        let eku = |purposes: &[&[u8]]| {
+            parse_extensions(&test_der::extensions(&[test_der::extension(
+                OID_EXT_KEY_USAGE,
+                false,
+                &test_der::ext_key_usage(purposes),
+            )]))
+        };
+        assert!(eku(&[OID_KP_OCSP_SIGNING]).unwrap().forbidden_purpose);
+        assert!(eku(&[OID_KP_CLIENT_AUTH, OID_KP_SERVER_AUTH]).unwrap().forbidden_purpose);
+        assert!(!eku(&[OID_KP_CLIENT_AUTH, OID_KP_EMAIL_PROTECTION]).unwrap().forbidden_purpose);
+        assert_eq!(eku(&[]).err(), Some(X509Error::Malformed), "empty SEQUENCE");
+    }
+
     #[test]
     fn flags_only_unknown_critical_extensions() {
         let ku = test_der::extension(OID_KEY_USAGE, true, &test_der::key_usage(6, &[0x40]));
         let crit = |oid: &[u8]| test_der::extensions(&[ku.clone(), test_der::extension(oid, true, NULL)]);
         assert!(parse_extensions(&crit(OID_UNKNOWN)).unwrap().unknown_critical);
-        for known in [OID_EXT_KEY_USAGE, OID_CERT_POLICIES, OID_SUBJECT_ALT_NAME] {
+        let eku = test_der::extension(OID_EXT_KEY_USAGE, true, &test_der::ext_key_usage(&[OID_KP_CLIENT_AUTH]));
+        assert!(!parse_extensions(&test_der::extensions(&[ku.clone(), eku])).unwrap().unknown_critical);
+        for known in [OID_CERT_POLICIES, OID_SUBJECT_ALT_NAME] {
             assert!(!parse_extensions(&crit(known)).unwrap().unknown_critical);
         }
         let non_critical = test_der::extensions(&[ku.clone(), test_der::extension(OID_UNKNOWN, false, NULL)]);
@@ -707,6 +753,12 @@ pub(crate) mod test_der {
     /// Значение KeyUsage: BIT STRING с указанным числом неиспользуемых битов.
     pub fn key_usage(unused: u8, bits: &[u8]) -> Vec<u8> {
         tlv(TAG_BIT_STRING, &[&[unused][..], bits].concat())
+    }
+
+    /// Значение extKeyUsage: SEQUENCE OF KeyPurposeId (OID).
+    pub fn ext_key_usage(purposes: &[&[u8]]) -> Vec<u8> {
+        let body: Vec<u8> = purposes.iter().flat_map(|p| tlv(TAG_OID, p)).collect();
+        tlv(TAG_SEQUENCE, &body)
     }
 
     /// Значение BasicConstraints: CA:TRUE — `30 03 01 01 FF`, CA:FALSE — пустой SEQUENCE.

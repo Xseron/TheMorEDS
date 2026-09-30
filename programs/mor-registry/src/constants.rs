@@ -36,6 +36,12 @@ pub const OID_EXT_KEY_USAGE: &[u8] = &[0x55, 0x1d, 0x25]; // 2.5.29.37
 pub const OID_CERT_POLICIES: &[u8] = &[0x55, 0x1d, 0x20]; // 2.5.29.32
 pub const OID_SUBJECT_ALT_NAME: &[u8] = &[0x55, 0x1d, 0x11]; // 2.5.29.17
 
+// Назначения ключа (extKeyUsage, RFC 5280 §4.2.1.12), запрещённые для печатей: TLS 1.2 сервер
+// подписывает client_random, выбранный посторонним; TSA и OCSP подписывают чужие данные.
+pub const OID_KP_SERVER_AUTH: &[u8] = &[0x2b, 0x06, 0x01, 0x05, 0x05, 0x07, 0x03, 0x01]; // 1.3.6.1.5.5.7.3.1
+pub const OID_KP_TIME_STAMPING: &[u8] = &[0x2b, 0x06, 0x01, 0x05, 0x05, 0x07, 0x03, 0x08]; // 1.3.6.1.5.5.7.3.8
+pub const OID_KP_OCSP_SIGNING: &[u8] = &[0x2b, 0x06, 0x01, 0x05, 0x05, 0x07, 0x03, 0x09]; // 1.3.6.1.5.5.7.3.9
+
 // Биты KeyUsage: именованный бит n — это 1 << n.
 pub const KU_DIGITAL_SIGNATURE: u16 = 1 << 0;
 pub const KU_NON_REPUDIATION: u16 = 1 << 1; // contentCommitment

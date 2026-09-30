@@ -56,6 +56,7 @@ issue ee_wrong_issuer "$EE_KEY" "$ACME" ca1b.pem "$CA1_KEY" ee_small.ext
 issue ee_no_orgid     "$EE_KEY" "/C=EE/O=Acme Robotics/CN=Acme Robotics" ca1.pem "$CA1_KEY" ee_small.ext
 issue ee_person       "$EE_KEY" "/C=EE/O=Acme Robotics/organizationIdentifier=NTREE-12345678/SN=Tamm/GN=Mari/serialNumber=PNOEE-38001085718/CN=Mari Tamm" ca1.pem "$CA1_KEY" ee_small.ext
 issue ee_rsa          "$RSA_KEY" "$ACME" ca1.pem "$CA1_KEY" ee_small.ext
+issue ee_ocsp         "$EE_KEY" "$ACME" ca1.pem "$CA1_KEY" ee_ocsp.ext
 
 cd .. && rm -rf work
 for f in *.der; do printf "%-22s %5d bytes\n" "$f" "$(stat -c %s "$f")"; done
