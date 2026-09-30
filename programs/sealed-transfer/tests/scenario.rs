@@ -1,0 +1,176 @@
+//! Transfer hook в LiteSVM: Token-2022 вызывает sealed-transfer на каждый transfer_checked.
+#![allow(dead_code)]
+
+use {
+    anchor_lang::{
+        prelude::{Clock, Pubkey},
+        solana_program::{
+            instruction::{AccountMeta, Instruction},
+            system_instruction, system_program,
+        },
+        InstructionData, ToAccountMetas,
+    },
+    litesvm::{
+        types::{FailedTransactionMetadata, TransactionMetadata},
+        LiteSVM,
+    },
+    sealed_transfer::{EXTRA_METAS_SEED, MOR_REGISTRY_ID, POLICY_SEED, SEAL_SEED, TOKEN_2022_ID},
+    solana_instruction::error::InstructionError,
+    solana_keypair::Keypair,
+    solana_message::{Message, VersionedMessage},
+    solana_signer::Signer,
+    solana_transaction::versioned::VersionedTransaction,
+    solana_transaction_error::TransactionError,
+    spl_token_2022_interface::{
+        extension::{transfer_hook, ExtensionType},
+        instruction as token_ix,
+        state::{Account as TokenAccount, Mint},
+    },
+};
+
+type TxResult = Result<TransactionMetadata, FailedTransactionMetadata>;
+
+const DECIMALS: u8 = 0;
+
+fn program_bytes() -> Vec<u8> {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/deploy/sealed_transfer.so");
+    std::fs::read(path).unwrap_or_else(|e| panic!("run `anchor build` first: {path}: {e}"))
+}
+
+fn send(svm: &mut LiteSVM, payer: &Keypair, signers: &[&Keypair], ixs: &[Instruction]) -> TxResult {
+    // Свежий blockhash: иначе LiteSVM отклонит повтор той же транзакции как AlreadyProcessed.
+    svm.expire_blockhash();
+    let msg = Message::new_with_blockhash(ixs, Some(&payer.pubkey()), &svm.latest_blockhash());
+    let mut all = vec![payer];
+    all.extend_from_slice(signers);
+    let tx = VersionedTransaction::try_new(VersionedMessage::Legacy(msg), &all).unwrap();
+    svm.send_transaction(tx)
+}
+
+fn ok(res: TxResult) -> TransactionMetadata {
+    res.unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs))
+}
+
+/// Custom-код ошибки перевода (инструкция 0): ошибка хука доходит через CPI как есть.
+fn custom_code(res: &TxResult) -> Option<u32> {
+    match res {
+        Err(e) => match &e.err {
+            TransactionError::InstructionError(0, InstructionError::Custom(code)) => Some(*code),
+            _ => None,
+        },
+        Ok(_) => None,
+    }
+}
+
+fn seal_pda(owner: &Pubkey) -> Pubkey {
+    Pubkey::find_program_address(&[SEAL_SEED, owner.as_ref()], &MOR_REGISTRY_ID).0
+}
+
+struct Env {
+    svm: LiteSVM,
+    issuer: Keypair,
+    mint: Pubkey,
+}
+
+impl Env {
+    /// Минт Token-2022 с TransferHook → sealed-transfer и политикой `min_trust_level`.
+    fn new(min_trust_level: u8) -> Env {
+        let mut svm = LiteSVM::new();
+        svm.add_program(sealed_transfer::ID, &program_bytes()).unwrap();
+        let issuer = Keypair::new();
+        svm.airdrop(&issuer.pubkey(), 10_000_000_000).unwrap();
+
+        let mint = Keypair::new();
+        let space = ExtensionType::try_calculate_account_len::<Mint>(&[ExtensionType::TransferHook]).unwrap();
+        let rent = svm.minimum_balance_for_rent_exemption(space);
+        let ixs = [
+            system_instruction::create_account(&issuer.pubkey(), &mint.pubkey(), rent, space as u64, &TOKEN_2022_ID),
+            transfer_hook::instruction::initialize(
+                &TOKEN_2022_ID,
+                &mint.pubkey(),
+                Some(issuer.pubkey()),
+                Some(sealed_transfer::ID),
+            )
+            .unwrap(),
+            token_ix::initialize_mint2(&TOKEN_2022_ID, &mint.pubkey(), &issuer.pubkey(), None, DECIMALS).unwrap(),
+        ];
+        ok(send(&mut svm, &issuer, &[&mint], &ixs));
+
+        let mut env = Env { svm, issuer, mint: mint.pubkey() };
+        let init = Instruction::new_with_bytes(
+            sealed_transfer::ID,
+            &sealed_transfer::instruction::Initialize { min_trust_level }.data(),
+            sealed_transfer::accounts::InitializeHook {
+                authority: env.issuer.pubkey(),
+                mint: env.mint,
+                extra_account_meta_list: env.extra_metas(),
+                policy: env.policy(),
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+        );
+        let issuer = env.issuer.insecure_clone();
+        ok(send(&mut env.svm, &issuer, &[], &[init]));
+        env
+    }
+
+    fn extra_metas(&self) -> Pubkey {
+        Pubkey::find_program_address(&[EXTRA_METAS_SEED, self.mint.as_ref()], &sealed_transfer::ID).0
+    }
+
+    fn policy(&self) -> Pubkey {
+        Pubkey::find_program_address(&[POLICY_SEED, self.mint.as_ref()], &sealed_transfer::ID).0
+    }
+
+    fn set_clock(&mut self, unix_timestamp: i64) {
+        self.svm.set_sysvar(&Clock { unix_timestamp, ..Clock::default() });
+    }
+
+    /// Токен-аккаунт владельца `owner` с расширением TransferHookAccount.
+    fn token_account(&mut self, owner: &Pubkey) -> Pubkey {
+        let account = Keypair::new();
+        let space =
+            ExtensionType::try_calculate_account_len::<TokenAccount>(&[ExtensionType::TransferHookAccount]).unwrap();
+        let rent = self.svm.minimum_balance_for_rent_exemption(space);
+        let issuer = self.issuer.insecure_clone();
+        let ixs = [
+            system_instruction::create_account(&issuer.pubkey(), &account.pubkey(), rent, space as u64, &TOKEN_2022_ID),
+            token_ix::initialize_account3(&TOKEN_2022_ID, &account.pubkey(), &self.mint, owner).unwrap(),
+        ];
+        ok(send(&mut self.svm, &issuer, &[&account], &ixs));
+        account.pubkey()
+    }
+
+    fn mint_to(&mut self, account: &Pubkey, amount: u64) {
+        let issuer = self.issuer.insecure_clone();
+        let ix = token_ix::mint_to(&TOKEN_2022_ID, &self.mint, account, &issuer.pubkey(), &[], amount).unwrap();
+        ok(send(&mut self.svm, &issuer, &[], &[ix]));
+    }
+
+    /// transfer_checked плюс аккаунты хука: реестр, политика, печать владельца получателя,
+    /// сама программа хука и список мета-аккаунтов. Token-2022 находит их по ключам.
+    fn transfer(&mut self, owner: &Keypair, from: &Pubkey, to: &Pubkey, to_owner: &Pubkey, amount: u64) -> TxResult {
+        let mut ix =
+            token_ix::transfer_checked(&TOKEN_2022_ID, from, &self.mint, to, &owner.pubkey(), &[], amount, DECIMALS)
+                .unwrap();
+        for key in [MOR_REGISTRY_ID, self.policy(), seal_pda(to_owner), sealed_transfer::ID, self.extra_metas()] {
+            ix.accounts.push(AccountMeta::new_readonly(key, false));
+        }
+        send(&mut self.svm, owner, &[], &[ix])
+    }
+}
+
+#[test]
+fn transfer_goes_through_hook() {
+    let mut env = Env::new(0);
+    let alice = Keypair::new();
+    env.svm.airdrop(&alice.pubkey(), 1_000_000_000).unwrap();
+    let bob = Pubkey::new_unique();
+    let from = env.token_account(&alice.pubkey());
+    let to = env.token_account(&bob);
+    env.mint_to(&from, 100);
+
+    let meta = ok(env.transfer(&alice, &from, &to, &bob, 10));
+    let hook = sealed_transfer::ID.to_string();
+    assert!(meta.logs.iter().any(|l| l.contains(&hook)), "hook was not invoked: {:#?}", meta.logs);
+}

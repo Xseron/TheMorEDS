@@ -8,9 +8,11 @@ skip-lint = false
 
 [programs.devnet]
 mor_registry = "CqbwC3DF4APG6cjRneir1UPuBbh49ttBrKasfc5QP1aP"
+sealed_transfer = "2A8chB6zt4LCsiiks5NrY3DceHvAVqWkAmMdNpyFkhz2"
 
 [programs.localnet]
 mor_registry = "CqbwC3DF4APG6cjRneir1UPuBbh49ttBrKasfc5QP1aP"
+sealed_transfer = "2A8chB6zt4LCsiiks5NrY3DceHvAVqWkAmMdNpyFkhz2"
 
 [provider]
 cluster = "devnet"

@@ -1,0 +1,39 @@
+[package]
+name = "sealed_transfer"
+version = "0.1.0"
+description = "Mör demo: Token-2022 transfer hook that admits only sealed recipients"
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "sealed_transfer"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build"]
+anchor-debug = []
+custom-heap = []
+custom-panic = []
+
+[dependencies]
+anchor-lang = "1.1.2"
+spl-discriminator = "0.5"
+spl-tlv-account-resolution = "0.11"
+spl-token-2022-interface = "3.1"
+spl-transfer-hook-interface = "2.1"
+
+[dev-dependencies]
+litesvm = "0.10.0"
+solana-instruction = "3.0"
+solana-keypair = "3.0.1"
+solana-message = "3.0.1"
+solana-signer = "3.0.0"
+solana-transaction = "3.0.2"
+solana-transaction-error = "3"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
