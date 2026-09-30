@@ -1,7 +1,10 @@
 //! Кто сейчас контролирует адрес: без его подписи печать не создаётся, а текущий контролёр
 //! может снять печать, выданную при прежнем владельце.
 
-use anchor_lang::{prelude::*, solana_program::bpf_loader_upgradeable};
+use anchor_lang::{
+    prelude::*,
+    solana_program::{bpf_loader_upgradeable, system_program},
+};
 
 use crate::{
     constants::{TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID},
@@ -21,7 +24,8 @@ const TOKEN_2022_ACCOUNT_TYPE: usize = 165;
 
 pub fn controls(kind: AddressKind, address: &AccountInfo, program_data: Option<&AccountInfo>, controller: &Pubkey) -> bool {
     match kind {
-        AddressKind::Wallet => address.key == controller,
+        // Кошелёк — адрес под System Program; у программы и минта свои контролёры.
+        AddressKind::Wallet => address.key == controller && address.owner == &system_program::ID,
         AddressKind::Program => program_data.is_some_and(|pd| upgrade_authority_is(address, pd, controller)),
         AddressKind::Mint => mint_authority_is(address, controller),
     }
