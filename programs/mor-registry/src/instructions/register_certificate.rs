@@ -1,11 +1,10 @@
 use anchor_lang::prelude::*;
-use solana_instructions_sysvar::{load_current_index_checked, load_instruction_at_checked};
 use solana_sha256_hasher::hash;
 
 use crate::{
     constants::*,
     error::MorError,
-    secp256r1,
+    precompile,
     state::{Certificate, TrustKind, TrustService},
     x509::{self, X509Error},
 };
@@ -36,12 +35,8 @@ pub fn handle_register_certificate(ctx: Context<RegisterCertificate>, serial: Ve
     require!(ts.kind == TrustKind::P256Ca, MorError::UnsupportedTrustKind);
 
     // Предыдущая инструкция — самодостаточный прекомпайл secp256r1.
-    let ix_sysvar = ctx.accounts.instructions.to_account_info();
-    let current = load_current_index_checked(&ix_sysvar)? as usize;
-    require!(current > 0, MorError::PrecompileMissing);
-    let precompile = load_instruction_at_checked(current - 1, &ix_sysvar)?;
-    require_keys_eq!(precompile.program_id, SECP256R1_PROGRAM_ID, MorError::PrecompileMissing);
-    let verified = secp256r1::parse_self_contained(&precompile.data)?;
+    let data = precompile::previous_instruction_data(&ctx.accounts.instructions, &SECP256R1_PROGRAM_ID)?;
+    let verified = precompile::parse_self_contained(&data, precompile::SECP256R1_KEY_LEN)?;
 
     // Подписал именно этот УЦ.
     require!(verified.pubkey == ts.pubkey, MorError::UntrustedKey);

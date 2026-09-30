@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 
 #[error_code]
 pub enum MorError {
-    #[msg("Previous instruction is not the secp256r1 precompile")]
+    #[msg("Previous instruction is not the expected signature precompile")]
     PrecompileMissing,
     #[msg("Precompile instruction data is malformed or not self-contained")]
     PrecompileMalformed,
@@ -34,4 +34,18 @@ pub enum MorError {
     UnsupportedTrustKind,
     #[msg("Certificate is not an end-entity signing certificate (CA, key usage or critical extension)")]
     NotEndEntity,
+    #[msg("Signer does not control the address")]
+    NotController,
+    #[msg("Signed seal message does not match the instruction")]
+    SealMessageMismatch,
+    #[msg("Seal signature submitted after its deadline")]
+    SignDeadlinePassed,
+    #[msg("Seal expiry is in the past or beyond the certificate")]
+    InvalidExpiry,
+    #[msg("Jurisdiction (country) is missing")]
+    MissingJurisdiction,
+    #[msg("Certificate extended key usage is not allowed for seals")]
+    ForbiddenKeyPurpose,
+    #[msg("Attestor key, its hash or DN hash is malformed")]
+    BadAttestorKey,
 }

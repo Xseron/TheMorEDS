@@ -69,12 +69,12 @@ fn add_trust_service_rejects_non_admin() {
 }
 
 #[test]
-fn add_trust_service_rejects_attestor_kind() {
+fn add_trust_service_rejects_malformed_attestor() {
     let mut env = Env::new();
     env.initialize().unwrap();
     let admin = env.admin.insecure_clone();
     let res = env.add_trust_service_as(&admin, TrustKind::Attestor, &ca1());
-    assert_mor_err(&res, MorError::UnsupportedTrustKind, 0);
+    assert_mor_err(&res, MorError::BadAttestorKey, 0);
 }
 
 #[test]

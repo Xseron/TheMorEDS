@@ -1,7 +1,7 @@
 pub mod constants;
 pub mod error;
 pub mod instructions;
-pub mod secp256r1;
+pub mod precompile;
 pub mod state;
 pub mod x509;
 

@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use solana_sha256_hasher::hash;
 
 use crate::{
     constants::*,
@@ -33,8 +34,14 @@ pub fn handle_add_trust_service(
     name: String,
     country: [u8; 2],
 ) -> Result<()> {
-    require!(kind == TrustKind::P256Ca, MorError::UnsupportedTrustKind);
-    require!(pubkey[0] == 0x02 || pubkey[0] == 0x03, MorError::UntrustedKey);
+    match kind {
+        TrustKind::P256Ca => require!(pubkey[0] == 0x02 || pubkey[0] == 0x03, MorError::UntrustedKey),
+        // Ed25519-ключ в первых 32 байтах; сид PDA — sha256 ключа; DN у аттестатора нет.
+        TrustKind::Attestor => require!(
+            pubkey[32] == 0 && spki_hash == hash(&pubkey[..32]).to_bytes() && subject_dn_hash == [0u8; 32],
+            MorError::BadAttestorKey
+        ),
+    }
     require!(name.len() <= MAX_NAME_LEN, MorError::FieldTooLong);
 
     let ts = &mut ctx.accounts.trust_service;

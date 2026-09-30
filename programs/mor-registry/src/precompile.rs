@@ -1,22 +1,24 @@
-//! Разбор данных инструкции прекомпайла secp256r1 (SIMD-0075).
+//! Разбор данных инструкций прекомпайлов secp256r1 (SIMD-0075) и Ed25519.
 //!
-//! Раскладка: `num_signatures: u8`, `padding: u8`, затем `num_signatures` структур
+//! Раскладка у обоих одна: `num_signatures: u8`, `padding: u8`, затем `num_signatures` структур
 //! смещений по 14 байт (7 × u16 LE: signature_offset, signature_instruction_index,
 //! public_key_offset, public_key_instruction_index, message_offset, message_length,
 //! message_instruction_index), затем произвольные данные. Индекс `0xFFFF` означает
-//! «эта же инструкция».
+//! «эта же инструкция». Ключ secp256r1 — 33 байта сжатый SEC1, Ed25519 — 32 байта.
 //!
 //! Программа принимает только самодостаточную инструкцию с одной подписью и читает
 //! ключ и сообщение ровно по тем смещениям, по которым их проверил прекомпайл.
 //! Так нельзя подменить проверенные байты на другие.
 
 use anchor_lang::prelude::*;
+use solana_instructions_sysvar::{load_current_index_checked, load_instruction_at_checked};
 
 use crate::error::MorError;
 
 pub const HEADER_LEN: usize = 2;
 pub const OFFSETS_LEN: usize = 14;
-pub const PUBKEY_LEN: usize = 33;
+pub const SECP256R1_KEY_LEN: usize = 33;
+pub const ED25519_KEY_LEN: usize = 32;
 pub const SIGNATURE_LEN: usize = 64;
 pub const SELF_INDEX: u16 = 0xFFFF;
 
@@ -27,7 +29,16 @@ pub struct VerifiedSignature<'a> {
     pub message: &'a [u8],
 }
 
-pub fn parse_self_contained(data: &[u8]) -> Result<VerifiedSignature<'_>> {
+/// Данные инструкции прямо перед текущей; её программа должна быть `precompile`.
+pub fn previous_instruction_data(ix_sysvar: &AccountInfo, precompile: &Pubkey) -> Result<Vec<u8>> {
+    let current = load_current_index_checked(ix_sysvar)? as usize;
+    require!(current > 0, MorError::PrecompileMissing);
+    let ix = load_instruction_at_checked(current - 1, ix_sysvar)?;
+    require_keys_eq!(ix.program_id, *precompile, MorError::PrecompileMissing);
+    Ok(ix.data)
+}
+
+pub fn parse_self_contained(data: &[u8], key_len: usize) -> Result<VerifiedSignature<'_>> {
     require!(data.len() >= HEADER_LEN + OFFSETS_LEN, MorError::PrecompileMalformed);
     require!(data[0] == 1, MorError::PrecompileMalformed);
 
@@ -49,7 +60,7 @@ pub fn parse_self_contained(data: &[u8]) -> Result<VerifiedSignature<'_>> {
     };
 
     Ok(VerifiedSignature {
-        pubkey: slice(pk_off, PUBKEY_LEN)?,
+        pubkey: slice(pk_off, key_len)?,
         signature: slice(sig_off, SIGNATURE_LEN)?,
         message: slice(msg_off, msg_len as usize)?,
     })
@@ -90,7 +101,7 @@ mod tests {
     #[test]
     fn parses_self_contained_instruction() {
         let d = data(1, OK, &payload(b"hello"));
-        let v = parse_self_contained(&d).unwrap();
+        let v = parse_self_contained(&d, SECP256R1_KEY_LEN).unwrap();
         assert_eq!(v.pubkey, &[0x02u8; 33]);
         assert_eq!(v.signature, &[0x11u8; 64]);
         assert_eq!(v.message, b"hello");
@@ -99,13 +110,13 @@ mod tests {
     #[test]
     fn rejects_multiple_signatures() {
         let d = data(2, OK, &payload(b"hello"));
-        assert_eq!(code(parse_self_contained(&d).unwrap_err()), u32::from(MorError::PrecompileMalformed));
+        assert_eq!(code(parse_self_contained(&d, SECP256R1_KEY_LEN).unwrap_err()), u32::from(MorError::PrecompileMalformed));
     }
 
     #[test]
     fn rejects_zero_signatures() {
         let d = data(0, OK, &payload(b"hello"));
-        assert_eq!(code(parse_self_contained(&d).unwrap_err()), u32::from(MorError::PrecompileMalformed));
+        assert_eq!(code(parse_self_contained(&d, SECP256R1_KEY_LEN).unwrap_err()), u32::from(MorError::PrecompileMalformed));
     }
 
     #[test]
@@ -114,7 +125,7 @@ mod tests {
             let mut off = OK;
             off[i] = 0; // ссылка на инструкцию 0, а не на себя
             let d = data(1, off, &payload(b"hello"));
-            assert_eq!(code(parse_self_contained(&d).unwrap_err()), u32::from(MorError::PrecompileMalformed), "index field {i}");
+            assert_eq!(code(parse_self_contained(&d, SECP256R1_KEY_LEN).unwrap_err()), u32::from(MorError::PrecompileMalformed), "index field {i}");
         }
     }
 
@@ -123,19 +134,19 @@ mod tests {
         let mut off = OK;
         off[5] = 6; // сообщение длиннее данных на байт
         let d = data(1, off, &payload(b"hello"));
-        assert_eq!(code(parse_self_contained(&d).unwrap_err()), u32::from(MorError::PrecompileMalformed));
+        assert_eq!(code(parse_self_contained(&d, SECP256R1_KEY_LEN).unwrap_err()), u32::from(MorError::PrecompileMalformed));
     }
 
     #[test]
     fn rejects_max_u16_offset_and_length() {
         let off = [49, 0xFFFF, 16, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF];
         let d = data(1, off, &payload(b"hello"));
-        assert_eq!(code(parse_self_contained(&d).unwrap_err()), u32::from(MorError::PrecompileMalformed));
+        assert_eq!(code(parse_self_contained(&d, SECP256R1_KEY_LEN).unwrap_err()), u32::from(MorError::PrecompileMalformed));
     }
 
     #[test]
     fn rejects_short_data() {
-        assert_eq!(code(parse_self_contained(&[1, 0, 0]).unwrap_err()), u32::from(MorError::PrecompileMalformed));
-        assert_eq!(code(parse_self_contained(&[]).unwrap_err()), u32::from(MorError::PrecompileMalformed));
+        assert_eq!(code(parse_self_contained(&[1, 0, 0], SECP256R1_KEY_LEN).unwrap_err()), u32::from(MorError::PrecompileMalformed));
+        assert_eq!(code(parse_self_contained(&[], SECP256R1_KEY_LEN).unwrap_err()), u32::from(MorError::PrecompileMalformed));
     }
 }
