@@ -11,11 +11,16 @@ use {
         types::{FailedTransactionMetadata, TransactionMetadata},
         LiteSVM,
     },
-    mor_registry::{error::MorError, state::TrustKind, x509},
+    mor_registry::{
+        error::MorError,
+        seal_message::{self, SealMessage},
+        state::{AddressKind, Certificate, SubjectType, TrustKind, TrustLevel},
+        x509,
+    },
     p256::{
-        ecdsa::Signature,
-        elliptic_curve::{ops::Reduce, PrimeField},
-        Scalar, U256,
+        ecdsa::{signature::Signer as _, Signature, SigningKey},
+        elliptic_curve::{ops::Reduce, sec1::ToEncodedPoint, PrimeField},
+        Scalar, SecretKey, U256,
     },
     sha2::{Digest, Sha256},
     solana_instruction::error::InstructionError,
@@ -27,6 +32,14 @@ use {
 };
 
 pub const SECP256R1_PROGRAM_ID: Pubkey = pubkey!("Secp256r1SigVerify1111111111111111111111111");
+pub const ED25519_PROGRAM_ID: Pubkey = pubkey!("Ed25519SigVerify111111111111111111111111111");
+
+/// Тестовые ключи из fixtures/keys (только для тестов): ключ сертификатов Acme и ключ УЦ ca1.
+pub const EE_KEY_PEM: &str = include_str!("../../../../fixtures/keys/ee.key");
+pub const CA1_KEY_PEM: &str = include_str!("../../../../fixtures/keys/ca1.key");
+
+/// Соль идентификатора в тестах eIDAS (для eIDAS она публична: идентификатор есть в сертификате).
+pub const SALT: [u8; 32] = [7; 32];
 
 pub type TxResult = Result<TransactionMetadata, FailedTransactionMetadata>;
 
@@ -368,5 +381,169 @@ impl Env {
             self.register_ix(trust, &payer.pubkey(), &ee.serial),
         ];
         self.send(&payer, &[], &ixs)
+    }
+}
+
+/// Подпись P-256 над сообщением (SHA-256 внутри): r и s big-endian, low-S — как требует прекомпайл.
+pub fn sign_p256(pem: &str, msg: &[u8]) -> [u8; 64] {
+    let key = SigningKey::from(SecretKey::from_sec1_pem(pem).unwrap());
+    let sig: Signature = key.sign(msg);
+    let sig = sig.normalize_s().unwrap_or(sig);
+    let mut out = [0u8; 64];
+    out.copy_from_slice(&sig.to_bytes());
+    out
+}
+
+/// Сжатый SEC1 открытый ключ из PEM закрытого.
+pub fn p256_pubkey(pem: &str) -> [u8; 33] {
+    let point = SecretKey::from_sec1_pem(pem).unwrap().public_key().to_encoded_point(true);
+    point.as_bytes().try_into().unwrap()
+}
+
+/// Самодостаточная инструкция Ed25519-прекомпайла: ключ @16, подпись @48, сообщение @112.
+pub fn ed25519_ix(pubkey: &[u8; 32], sig: &[u8; 64], msg: &[u8]) -> Instruction {
+    let (pk_off, sig_off, msg_off) = (16u16, 48u16, 112u16);
+    let mut data = vec![1u8, 0];
+    for v in [sig_off, 0xFFFF, pk_off, 0xFFFF, msg_off, msg.len() as u16, 0xFFFF] {
+        data.extend_from_slice(&v.to_le_bytes());
+    }
+    data.extend_from_slice(pubkey);
+    data.extend_from_slice(sig);
+    data.extend_from_slice(msg);
+    Instruction::new_with_bytes(ED25519_PROGRAM_ID, &data, vec![])
+}
+
+pub fn program_data_pda(program_id: &Pubkey) -> Pubkey {
+    Pubkey::find_program_address(&[program_id.as_ref()], &bpf_loader_upgradeable::ID).0
+}
+
+/// Минт SPL Token с mint authority `authority`: 82 байта, is_initialized = 1.
+/// Повторный вызов — «смена mint authority».
+pub fn set_mint(svm: &mut LiteSVM, mint: &Pubkey, authority: &Pubkey) {
+    let mut data = vec![0u8; 82];
+    data[..4].copy_from_slice(&[1, 0, 0, 0]);
+    data[4..36].copy_from_slice(authority.as_ref());
+    data[45] = 1;
+    svm.set_account(
+        *mint,
+        solana_account::Account {
+            lamports: 1_000_000_000,
+            data,
+            owner: mor_registry::TOKEN_PROGRAM_ID,
+            executable: false,
+            rent_epoch: 0,
+        },
+    )
+    .unwrap();
+}
+
+/// Параметры печати, общие для обоих путей; тесты меняют одно поле, чтобы получить отказ.
+#[derive(Clone, Debug)]
+pub struct SealReq {
+    pub kind: AddressKind,
+    pub address: Pubkey,
+    pub controller: Pubkey,
+    pub program_data: Option<Pubkey>,
+    pub trust: Pubkey,
+    /// eIDAS: PDA Certificate; аттестатор: Pubkey::default().
+    pub certificate: Pubkey,
+    /// eIDAS: соль идентификатора.
+    pub salt: [u8; 32],
+    /// Аттестатор: хэш идентификатора и название.
+    pub identifier_hash: [u8; 32],
+    pub name: String,
+    pub expires_at: i64,
+    pub sign_deadline: i64,
+}
+
+impl SealReq {
+    /// Кошелёк `controller` запечатывает сам себя сертификатом `certificate` (eIDAS).
+    pub fn wallet(controller: &Pubkey, trust: &Pubkey, certificate: &Pubkey) -> SealReq {
+        SealReq {
+            kind: AddressKind::Wallet,
+            address: *controller,
+            controller: *controller,
+            program_data: None,
+            trust: *trust,
+            certificate: *certificate,
+            salt: SALT,
+            identifier_hash: [0; 32],
+            name: String::new(),
+            expires_at: now() + 30 * 86_400,
+            sign_deadline: now() + 600,
+        }
+    }
+}
+
+impl Env {
+    pub fn seal_pda(&self, address: &Pubkey) -> Pubkey {
+        Pubkey::find_program_address(&[mor_registry::SEAL_SEED, address.as_ref()], &self.program_id).0
+    }
+
+    /// Регистрирует УЦ ca1 и сертификат ee_small; возвращает (TrustService, Certificate).
+    pub fn eidas(&mut self) -> (Pubkey, Pubkey) {
+        let ca = ca1();
+        let trust = self.add_trust_service(&ca);
+        let cert = ee(EE_SMALL);
+        self.register(&trust, &ca.pubkey, &cert)
+            .unwrap_or_else(|e| panic!("register failed: {:?}\n{:#?}", e.err, e.meta.logs));
+        (trust, self.cert_pda(&trust, &cert.serial))
+    }
+
+    /// Сообщение eIDAS-печати: поля организации берутся из аккаунта Certificate.
+    pub fn p256_message(&self, r: &SealReq) -> Vec<u8> {
+        let cert: Certificate = self.account(&r.certificate);
+        let id = seal_message::identifier_hash(&r.salt, cert.country, &cert.org_id);
+        SealMessage {
+            address: &r.address,
+            address_kind: r.kind,
+            controller: &r.controller,
+            trust_level: TrustLevel::Trustless,
+            trust_service: &r.trust,
+            certificate: &r.certificate,
+            jurisdiction: cert.country,
+            subject_type: SubjectType::LegalEntity,
+            identifier_hash: &id,
+            expires_at: r.expires_at,
+            sign_deadline: r.sign_deadline,
+            name: &cert.org_name,
+        }
+        .to_bytes()
+    }
+
+    pub fn seal_p256_ix(&self, r: &SealReq) -> Instruction {
+        Instruction::new_with_bytes(
+            self.program_id,
+            &mor_registry::instruction::RegisterSealP256 {
+                kind: r.kind,
+                salt: r.salt,
+                expires_at: r.expires_at,
+                sign_deadline: r.sign_deadline,
+            }
+            .data(),
+            mor_registry::accounts::RegisterSealP256 {
+                controller: r.controller,
+                address: r.address,
+                program_data: r.program_data,
+                trust_service: r.trust,
+                certificate: r.certificate,
+                seal: self.seal_pda(&r.address),
+                instructions: solana_instructions_sysvar::ID,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+        )
+    }
+
+    /// [secp256r1 над `msg` ключом `pem`, register_seal_p256]; платит и подписывает контролёр.
+    pub fn seal_p256_signed(&mut self, r: &SealReq, controller: &Keypair, pem: &str, msg: &[u8]) -> TxResult {
+        let ixs = [secp256r1_ix(&p256_pubkey(pem), &sign_p256(pem, msg), msg), self.seal_p256_ix(r)];
+        self.send(controller, &[], &ixs)
+    }
+
+    /// Честная eIDAS-печать: ключ сертификата ee_small подписывает правильное сообщение.
+    pub fn seal_p256(&mut self, r: &SealReq, controller: &Keypair) -> TxResult {
+        let msg = self.p256_message(r);
+        self.seal_p256_signed(r, controller, EE_KEY_PEM, &msg)
     }
 }

@@ -40,4 +40,14 @@ pub mod mor_registry {
     pub fn register_certificate(ctx: Context<RegisterCertificate>, serial: Vec<u8>) -> Result<()> {
         crate::instructions::register_certificate::handle_register_certificate(ctx, serial)
     }
+
+    pub fn register_seal_p256(
+        ctx: Context<RegisterSealP256>,
+        kind: AddressKind,
+        salt: [u8; 32],
+        expires_at: i64,
+        sign_deadline: i64,
+    ) -> Result<()> {
+        crate::instructions::register_seal_p256::handle_register_seal_p256(ctx, kind, salt, expires_at, sign_deadline)
+    }
 }
