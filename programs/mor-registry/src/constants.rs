@@ -6,6 +6,14 @@ pub const CONFIG_SEED: &[u8] = b"config";
 pub const TRUST_SEED: &[u8] = b"trust";
 #[constant]
 pub const CERT_SEED: &[u8] = b"cert";
+#[constant]
+pub const SEAL_SEED: &[u8] = b"seal";
+/// Префикс подписываемого сообщения печати: отличает его от DER (0x30/0x31) и TLS-контекстов.
+pub const SEAL_TAG: &[u8] = b"MOR-SEAL-V1";
+pub const MAX_SEAL_NAME_LEN: usize = 128;
+
+pub const TOKEN_PROGRAM_ID: Pubkey = pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+pub const TOKEN_2022_PROGRAM_ID: Pubkey = pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
 /// Прекомпайл проверки подписей P-256 (SIMD-0075).
 pub const SECP256R1_PROGRAM_ID: Pubkey = pubkey!("Secp256r1SigVerify1111111111111111111111111");

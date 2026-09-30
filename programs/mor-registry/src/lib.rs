@@ -1,7 +1,9 @@
 pub mod constants;
+pub mod controller;
 pub mod error;
 pub mod instructions;
 pub mod precompile;
+pub mod seal_message;
 pub mod state;
 pub mod x509;
 
