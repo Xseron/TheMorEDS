@@ -13,9 +13,9 @@ use spl_transfer_hook_interface::instruction::ExecuteInstruction;
 declare_id!("2A8chB6zt4LCsiiks5NrY3DceHvAVqWkAmMdNpyFkhz2");
 
 pub const TOKEN_2022_ID: Pubkey = pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-/// Реестр Mör. В Task 9 константы реестра приходят из крейта `mor-verify-seal`.
-pub const MOR_REGISTRY_ID: Pubkey = pubkey!("CqbwC3DF4APG6cjRneir1UPuBbh49ttBrKasfc5QP1aP");
-pub const SEAL_SEED: &[u8] = b"seal";
+/// Реестр Mör и сид печати — из крейта, которым пользуется любой сторонний потребитель.
+pub use mor_verify_seal::{MOR_REGISTRY_ID, SEAL_SEED};
+use mor_verify_seal::{verify_seal, TrustLevel};
 pub const POLICY_SEED: &[u8] = b"policy";
 /// Сид списка дополнительных аккаунтов задан интерфейсом transfer hook.
 pub const EXTRA_METAS_SEED: &[u8] = b"extra-account-metas";
@@ -28,7 +28,7 @@ pub mod sealed_transfer {
 
     /// Политика минта и список дополнительных аккаунтов для Token-2022. Подписывает mint authority.
     pub fn initialize(ctx: Context<InitializeHook>, min_trust_level: u8) -> Result<()> {
-        require!(min_trust_level <= 1, HookError::BadTrustLevel);
+        require!(TrustLevel::from_u8(min_trust_level).is_some(), HookError::BadTrustLevel);
         {
             let data = ctx.accounts.mint.try_borrow_data()?;
             let mint = StateWithExtensions::<Mint>::unpack(&data[..])?;
@@ -73,12 +73,21 @@ pub mod sealed_transfer {
     #[instruction(discriminator = ExecuteInstruction::SPL_DISCRIMINATOR_SLICE)]
     pub fn execute(ctx: Context<Execute>, _amount: u64) -> Result<()> {
         // Прямой вызов хука мимо Token-2022 ничего не должен разрешать.
-        let data = ctx.accounts.source.try_borrow_data()?;
-        let source = StateWithExtensions::<TokenAccount>::unpack(&data[..])?;
-        require!(
-            bool::from(source.get_extension::<TransferHookAccount>()?.transferring),
-            HookError::NotTransferring
-        );
+        {
+            let data = ctx.accounts.source.try_borrow_data()?;
+            let source = StateWithExtensions::<TokenAccount>::unpack(&data[..])?;
+            require!(
+                bool::from(source.get_extension::<TransferHookAccount>()?.transferring),
+                HookError::NotTransferring
+            );
+        }
+        let owner = {
+            let data = ctx.accounts.destination.try_borrow_data()?;
+            StateWithExtensions::<TokenAccount>::unpack(&data[..])?.base.owner
+        };
+        let min = TrustLevel::from_u8(ctx.accounts.policy.min_trust_level).ok_or(HookError::BadTrustLevel)?;
+        // Одна строка: у владельца получателя действующая печать нужного уровня.
+        verify_seal(&ctx.accounts.seal, &owner, min)?;
         Ok(())
     }
 }

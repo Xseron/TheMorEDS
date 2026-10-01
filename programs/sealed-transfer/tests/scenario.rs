@@ -14,7 +14,9 @@ use {
         types::{FailedTransactionMetadata, TransactionMetadata},
         LiteSVM,
     },
+    mor_verify_seal::{test_utils::seal_account, TrustLevel},
     sealed_transfer::{EXTRA_METAS_SEED, MOR_REGISTRY_ID, POLICY_SEED, SEAL_SEED, TOKEN_2022_ID},
+    solana_account::Account,
     solana_instruction::error::InstructionError,
     solana_keypair::Keypair,
     solana_message::{Message, VersionedMessage},
@@ -160,17 +162,43 @@ impl Env {
     }
 }
 
+const NOW: i64 = 1_800_000_000;
+
+/// Печать владельца `owner` — аккаунт реестра в его раскладке (регистрацию проверяют тесты реестра).
+fn put_seal(env: &mut Env, owner: &Pubkey, level: TrustLevel, expires_at: i64) {
+    let (pda, data) = seal_account(owner, level, expires_at);
+    let account = Account { lamports: 10_000_000, data, owner: MOR_REGISTRY_ID, executable: false, rent_epoch: 0 };
+    env.svm.set_account(pda, account).unwrap();
+}
+
+/// Отзыв закрывает аккаунт печати: ни лампортов, ни данных.
+fn remove_seal(env: &mut Env, owner: &Pubkey) {
+    let account = Account { lamports: 0, data: vec![], owner: system_program::ID, executable: false, rent_epoch: 0 };
+    env.svm.set_account(seal_pda(owner), account).unwrap();
+}
+
 #[test]
-fn transfer_goes_through_hook() {
-    let mut env = Env::new(0);
+fn only_sealed_recipients_receive() {
+    let mut env = Env::new(TrustLevel::Attestor as u8);
+    env.set_clock(NOW);
     let alice = Keypair::new();
     env.svm.airdrop(&alice.pubkey(), 1_000_000_000).unwrap();
-    let bob = Pubkey::new_unique();
     let from = env.token_account(&alice.pubkey());
-    let to = env.token_account(&bob);
     env.mint_to(&from, 100);
 
-    let meta = ok(env.transfer(&alice, &from, &to, &bob, 10));
-    let hook = sealed_transfer::ID.to_string();
-    assert!(meta.logs.iter().any(|l| l.contains(&hook)), "hook was not invoked: {:#?}", meta.logs);
+    let sealed = Pubkey::new_unique();
+    let unsealed = Pubkey::new_unique();
+    let to_sealed = env.token_account(&sealed);
+    let to_unsealed = env.token_account(&unsealed);
+    put_seal(&mut env, &sealed, TrustLevel::Attestor, NOW + 3_600);
+
+    ok(env.transfer(&alice, &from, &to_sealed, &sealed, 10));
+    assert_eq!(custom_code(&env.transfer(&alice, &from, &to_unsealed, &unsealed, 10)), Some(9100), "no seal");
+
+    env.set_clock(NOW + 3_600);
+    assert_eq!(custom_code(&env.transfer(&alice, &from, &to_sealed, &sealed, 10)), Some(9102), "seal expired");
+    env.set_clock(NOW);
+
+    remove_seal(&mut env, &sealed);
+    assert_eq!(custom_code(&env.transfer(&alice, &from, &to_sealed, &sealed, 10)), Some(9100), "seal revoked");
 }
