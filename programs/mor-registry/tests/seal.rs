@@ -163,6 +163,13 @@ fn stranger_cannot_revoke_new_mint_authority_can() {
 
     let stranger = env.fund_new();
     assert_mor_err(&env.revoke(&stranger, &mint, None), MorError::NotController, 0);
+    // Чужой кошелёк как `address` вместе с печатью минта: связь печати и адреса держит ограничение.
+    let mint_seal = env.seal_pda(&mint);
+    assert_mor_err(
+        &env.revoke_with_seal(&stranger, &stranger.pubkey(), &mint_seal, None),
+        MorError::NotController,
+        0,
+    );
 
     let new = env.fund_new();
     set_mint(&mut env.svm, &mint, &new.pubkey());
@@ -173,6 +180,20 @@ fn stranger_cannot_revoke_new_mint_authority_can() {
     r.controller = new.pubkey();
     ok(env.seal_p256(&r, &new));
     assert_eq!(env.account::<Seal>(&pda).controller, new.pubkey());
+
+    // Сохранённый контролёр снимает печать, даже когда mint authority уже у третьего.
+    let third = env.fund_new();
+    set_mint(&mut env.svm, &mint, &third.pubkey());
+    ok(env.revoke(&new, &mint, None));
+    assert!(env.svm.get_account(&pda).map_or(true, |a| a.data.is_empty()), "seal must be closed");
+
+    // Адрес запечатали как кошелёк, потом на нём появился минт: печать снимает его authority.
+    let early = env.fund_new();
+    let authority = env.fund_new();
+    let early_req = SealReq::wallet(&early.pubkey(), &trust, &cert);
+    ok(env.seal_p256(&early_req, &early));
+    set_mint(&mut env.svm, &early.pubkey(), &authority.pubkey());
+    ok(env.revoke(&authority, &early.pubkey(), None));
 }
 
 // Крейт читает печать, записанную Anchor, по своим смещениям: раскладки не разошлись.

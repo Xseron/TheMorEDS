@@ -555,6 +555,18 @@ impl Env {
     }
 
     pub fn revoke(&mut self, signer: &Keypair, address: &Pubkey, program_data: Option<Pubkey>) -> TxResult {
+        let seal = self.seal_pda(address);
+        self.revoke_with_seal(signer, address, &seal, program_data)
+    }
+
+    /// Отзыв с явно заданным аккаунтом печати (для проверки, что печать и адрес связаны).
+    pub fn revoke_with_seal(
+        &mut self,
+        signer: &Keypair,
+        address: &Pubkey,
+        seal: &Pubkey,
+        program_data: Option<Pubkey>,
+    ) -> TxResult {
         let ix = Instruction::new_with_bytes(
             self.program_id,
             &mor_registry::instruction::RevokeSeal {}.data(),
@@ -562,7 +574,7 @@ impl Env {
                 signer: signer.pubkey(),
                 address: *address,
                 program_data,
-                seal: self.seal_pda(address),
+                seal: *seal,
             }
             .to_account_metas(None),
         );
