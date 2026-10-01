@@ -1,0 +1,24 @@
+[package]
+name = "mor-verify-seal"
+version = "0.1.0"
+description = "Mör: check in one line who stands behind a Solana address"
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+# Сборка данных аккаунта печати для тестов программ-потребителей.
+test-utils = []
+
+[dependencies]
+solana-account-info = "3"
+solana-clock = "3"
+solana-program-error = "3"
+solana-pubkey = "3"
+solana-sysvar = "3"
+
+# Вне сети create/find_program_address считаются в коде (curve25519), в сети — сисколлом.
+[target.'cfg(not(target_os = "solana"))'.dependencies]
+solana-pubkey = { version = "3", features = ["curve25519", "sha2"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }

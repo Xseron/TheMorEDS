@@ -174,3 +174,31 @@ fn stranger_cannot_revoke_new_mint_authority_can() {
     ok(env.seal_p256(&r, &new));
     assert_eq!(env.account::<Seal>(&pda).controller, new.pubkey());
 }
+
+// Крейт читает печать, записанную Anchor, по своим смещениям: раскладки не разошлись.
+#[test]
+fn verify_seal_crate_reads_registry_seal() {
+    assert_eq!(mor_verify_seal::MOR_REGISTRY_ID, mor_registry::ID);
+    let (mut env, trust, cert) = setup();
+    let acme = env.fund_new();
+    let r = SealReq::wallet(&acme.pubkey(), &trust, &cert);
+    ok(env.seal_p256(&r, &acme));
+
+    let pda = env.seal_pda(&acme.pubkey());
+    let mut acc = env.svm.get_account(&pda).unwrap();
+    let mut lamports = acc.lamports;
+    let info = anchor_lang::prelude::AccountInfo::new(&pda, false, false, &mut lamports, &mut acc.data, &acc.owner, false);
+    let seal = mor_verify_seal::verify_seal_at(&info, &acme.pubkey(), mor_verify_seal::TrustLevel::Trustless, now())
+        .unwrap();
+    assert_eq!(seal.address, acme.pubkey());
+    assert_eq!(seal.address_kind, mor_verify_seal::AddressKind::Wallet);
+    assert_eq!(seal.controller, acme.pubkey());
+    assert_eq!(seal.trust_level, mor_verify_seal::TrustLevel::Trustless);
+    assert_eq!(seal.jurisdiction, *b"EE");
+    assert_eq!(seal.subject_type, 0);
+    assert_eq!(seal.identifier_hash, sha256(&[&SALT[..], b"EE", b"NTREE-12345678"].concat()));
+    assert_eq!(seal.trust_service, trust);
+    assert_eq!(seal.certificate, Some(cert));
+    assert_eq!(seal.expires_at, r.expires_at);
+    assert_eq!(seal.created_at, now());
+}

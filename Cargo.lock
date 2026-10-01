@@ -1875,6 +1875,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "mor-verify-seal"
+version = "0.1.0"
+dependencies = [
+ "solana-account-info",
+ "solana-clock 3.2.1",
+ "solana-program-error",
+ "solana-pubkey 3.0.0",
+ "solana-sysvar",
+]
+
+[[package]]
 name = "mor_registry"
 version = "0.1.0"
 dependencies = [
@@ -1882,6 +1893,7 @@ dependencies = [
  "bincode",
  "hex",
  "litesvm",
+ "mor-verify-seal",
  "p256",
  "rand_core 0.6.4",
  "sha2 0.10.9",
