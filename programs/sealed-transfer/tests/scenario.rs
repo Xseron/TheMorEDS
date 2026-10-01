@@ -1,5 +1,4 @@
 //! Transfer hook в LiteSVM: Token-2022 вызывает sealed-transfer на каждый transfer_checked.
-#![allow(dead_code)]
 
 use {
     anchor_lang::{

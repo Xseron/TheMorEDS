@@ -143,7 +143,7 @@ pub struct Execute<'info> {
         has_one = mint @ HookError::PolicyMismatch
     )]
     pub policy: Account<'info, Policy>,
-    /// CHECK: печать владельца получателя; проверяется крейтом mor-verify-seal (Task 9)
+    /// CHECK: печать владельца получателя; проверяется крейтом mor-verify-seal
     pub seal: UncheckedAccount<'info>,
 }
 
