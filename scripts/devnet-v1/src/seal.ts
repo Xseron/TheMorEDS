@@ -183,13 +183,14 @@ async function main() {
     const { value } = await rpc.getBalance(w.address).send();
     if (value < 20_000_000n) await sendV0(`fund ${w.address}`, payer, [tok.transferSolInstruction(payer.address, w.address, 50_000_000n)]);
   }
-  const now = BigInt(Math.floor(Date.now() / 1000));
-  const deadline = now + 600n;
 
   // 3. Печать A через eIDAS: ключ сертификата Acme подписывает сообщение, A — транзакцию.
-  const sealA = await sealOf(a.address);
-  if (await account(sealA)) console.log('A already sealed', sealA);
-  else {
+  // Вынесена в функцию: в конце прогона A запечатывается заново (время считается на месте,
+  // чтобы медленный прогон не упёрся в просроченный дедлайн).
+  const sealAPda = await sealOf(a.address);
+  async function sealA(label: string) {
+    const now = BigInt(Math.floor(Date.now() / 1000));
+    const deadline = now + 600n;
     const salt = new Uint8Array(randomBytes(32));
     const notAfter = BigInt(Date.parse(cert.notAfter) / 1000);
     const expiresAt = now + 180n * DAY < notAfter ? now + 180n * DAY : notAfter;
@@ -208,7 +209,7 @@ async function main() {
       name: cert.orgName,
     });
     const der = sign('sha256', msg, { key: createPrivateKey(readFileSync(join(ROOT, 'fixtures/keys/ee.key'))), dsaEncoding: 'der' });
-    await sendV1('register_seal_p256 (A, eIDAS)', a, [
+    await sendV1(label, a, [
       ix.secp256r1Instruction(compressP256(ee.publicKey), signatureToLowS(new Uint8Array(der)), msg),
       ix.registerSealP256Instruction(program, {
         controller: a.address,
@@ -216,7 +217,7 @@ async function main() {
         programData: null,
         trustService: caTrust,
         certificate,
-        seal: sealA,
+        seal: sealAPda,
         kind: ix.AddressKind.Wallet,
         salt,
         expiresAt,
@@ -224,14 +225,23 @@ async function main() {
       }),
     ]);
   }
+  if (await account(sealAPda)) console.log('A already sealed', sealAPda);
+  else await sealA('register_seal_p256 (A, eIDAS)');
 
   // 4. Печать B через аттестатора: на цепочку попадает только sha256(соль ‖ KZ ‖ БИН).
   const sealB = await sealOf(b.address);
   if (await account(sealB)) console.log('B already sealed', sealB);
   else {
+    const now = BigInt(Math.floor(Date.now() / 1000));
+    const deadline = now + 600n;
     const salt = new Uint8Array(randomBytes(32));
     const identifierHash = sha256(salt, utf8('KZ'), utf8(BIN));
-    console.log(`B: BIN salt ${hex(salt)} (the owner keeps it to disclose the BIN off-chain)`);
+    // Соль нужна владельцу, чтобы раскрыть БИН вне цепочки; в вывод она не попадает, только путь к файлу.
+    // Файл пишется лишь здесь, при создании печати, поэтому соль существующей печати не затирается.
+    const saltPath = join(DEMO, 'b-salt.hex');
+    mkdirSync(DEMO, { recursive: true });
+    writeFileSync(saltPath, hex(salt) + '\n', { mode: 0o600 });
+    console.log(`B: BIN salt saved to ${saltPath} (the owner keeps it to disclose the BIN off-chain)`);
     const expiresAt = now + 180n * DAY;
     const msg = ix.sealMessage({
       program,
@@ -307,9 +317,14 @@ async function main() {
   await sendV0('transfer → B (attestor seal)', payer, [await transfer(ataB, b.address)]);
   await sendRejected('transfer → C (no seal)', payer, [await transfer(ataC, c.address)], NOT_SEALED);
 
-  // 8. Отзыв печати A её контролёром — перевод A снова отклоняется. Следующий запуск запечатает A заново.
-  await sendV0('revoke_seal (A)', a, [ix.revokeSealInstruction(program, { signer: a.address, address: a.address, programData: null, seal: sealA })]);
+  // 8. Отзыв печати A её контролёром — перевод A снова отклоняется.
+  await sendV0('revoke_seal (A)', a, [ix.revokeSealInstruction(program, { signer: a.address, address: a.address, programData: null, seal: sealAPda })]);
   await sendRejected('transfer → A after revoke', payer, [await transfer(ataA, a.address)], NOT_SEALED);
+
+  // 9. A запечатывается заново: после прогона на devnet остаётся живая eIDAS-печать
+  // для страницы «кто за этим адресом».
+  await sealA('register_seal_p256 (A, eIDAS, re-seal)');
+  console.log('A is sealed again (eIDAS), ready for the "who is behind this address" page:', sealAPda);
 
   console.log('seal B', sealB, ix.decodeSeal((await account(sealB))!));
 }
