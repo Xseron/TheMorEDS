@@ -5,7 +5,7 @@ use {
     common::*,
     mor_registry::{
         error::MorError,
-        state::{Seal, TrustLevel},
+        state::{AddressKind, Seal, SubjectType, TrustLevel},
     },
     solana_signer::Signer,
 };
@@ -27,6 +27,11 @@ fn seals_wallet_through_attestor() {
         .unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
 
     let seal: Seal = env.account(&env.seal_pda(&romashka.pubkey()));
+    assert_eq!(seal.address, romashka.pubkey());
+    assert_eq!(seal.address_kind, AddressKind::Wallet);
+    assert_eq!(seal.controller, romashka.pubkey());
+    assert_eq!(seal.subject_type, SubjectType::LegalEntity);
+    assert_eq!(seal.expires_at, r.expires_at);
     assert_eq!(seal.trust_level, TrustLevel::Attestor);
     assert_eq!(seal.jurisdiction, *b"KZ");
     assert_eq!(seal.identifier_hash, r.identifier_hash);

@@ -98,7 +98,7 @@ pub fn evaluate_certificate<'a>(tbs: &'a [u8], now: i64, issuer_dn_hash: &[u8; 3
     // TLS-сервер, TSA и OCSP подписывают данные, частично выбранные посторонними.
     require!(!info.forbidden_purpose, MorError::ForbiddenKeyPurpose);
     let (org_name, org_id) = match (info.org_name, info.org_id) {
-        (Some(name), Some(id)) => (name, id),
+        (Some(name), Some(id)) if !name.is_empty() && !id.is_empty() => (name, id),
         _ => return err!(MorError::MissingOrgAttributes),
     };
     // Сертификат физлица или сотрудника. Это страховка: TBS уже лежит в транзакции, поэтому
