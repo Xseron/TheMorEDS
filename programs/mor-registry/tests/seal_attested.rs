@@ -50,6 +50,10 @@ fn rejects_arguments_that_differ_from_attestation() {
     let mut forged = r.clone();
     forged.name = "ТОО «Лютик»".to_string();
     assert_mor_err(&env.seal_attested_signed(&forged, &romashka, &attestor(), &msg), MorError::SealMessageMismatch, 1);
+
+    // Та же подпись, но чужим Ed25519-ключом, не аттестатора.
+    let stranger = solana_keypair::Keypair::new();
+    assert_mor_err(&env.seal_attested_signed(&r, &romashka, &stranger, &msg), MorError::UntrustedKey, 1);
 }
 
 // 12. УЦ P-256 на пути аттестатора.

@@ -554,6 +554,21 @@ impl Env {
         self.send(controller, &[], &ixs)
     }
 
+    pub fn revoke(&mut self, signer: &Keypair, address: &Pubkey, program_data: Option<Pubkey>) -> TxResult {
+        let ix = Instruction::new_with_bytes(
+            self.program_id,
+            &mor_registry::instruction::RevokeSeal {}.data(),
+            mor_registry::accounts::RevokeSeal {
+                signer: signer.pubkey(),
+                address: *address,
+                program_data,
+                seal: self.seal_pda(address),
+            }
+            .to_account_metas(None),
+        );
+        self.send(signer, &[], &[ix])
+    }
+
     /// Честная eIDAS-печать: ключ сертификата ee_small подписывает правильное сообщение.
     pub fn seal_p256(&mut self, r: &SealReq, controller: &Keypair) -> TxResult {
         let msg = self.p256_message(r);

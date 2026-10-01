@@ -63,4 +63,8 @@ pub mod mor_registry {
             ctx, kind, identifier_hash, name, expires_at, sign_deadline,
         )
     }
+
+    pub fn revoke_seal(ctx: Context<RevokeSeal>) -> Result<()> {
+        crate::instructions::revoke_seal::handle_revoke_seal(ctx)
+    }
 }

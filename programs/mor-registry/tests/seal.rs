@@ -147,3 +147,30 @@ fn rejects_late_signature_and_expiry_beyond_certificate() {
     r.expires_at = validity(EE_SMALL).1 + 1;
     assert_mor_err(&env.seal_p256(&r, &acme), MorError::InvalidExpiry, 1);
 }
+
+// 4. Посторонний не отзывает; после смены mint authority новый владелец снимает печать,
+// выданную при прежнем, и запечатывает минт заново.
+#[test]
+fn stranger_cannot_revoke_new_mint_authority_can() {
+    let (mut env, trust, cert) = setup();
+    let old = env.fund_new();
+    let mint = Pubkey::new_unique();
+    set_mint(&mut env.svm, &mint, &old.pubkey());
+    let mut r = SealReq::wallet(&old.pubkey(), &trust, &cert);
+    r.kind = AddressKind::Mint;
+    r.address = mint;
+    ok(env.seal_p256(&r, &old));
+
+    let stranger = env.fund_new();
+    assert_mor_err(&env.revoke(&stranger, &mint, None), MorError::NotController, 0);
+
+    let new = env.fund_new();
+    set_mint(&mut env.svm, &mint, &new.pubkey());
+    ok(env.revoke(&new, &mint, None));
+    let pda = env.seal_pda(&mint);
+    assert!(env.svm.get_account(&pda).map_or(true, |a| a.data.is_empty()), "seal must be closed");
+
+    r.controller = new.pubkey();
+    ok(env.seal_p256(&r, &new));
+    assert_eq!(env.account::<Seal>(&pda).controller, new.pubkey());
+}
