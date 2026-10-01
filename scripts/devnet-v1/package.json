@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "devnet": "tsx src/main.ts"
+    "devnet": "tsx src/main.ts",
+    "devnet:seal": "tsx src/seal.ts"
   },
   "dependencies": {
     "@solana/kit": "^8.3.0"
