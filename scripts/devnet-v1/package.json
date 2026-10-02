@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "devnet": "tsx src/main.ts",
-    "devnet:seal": "tsx src/seal.ts"
+    "devnet:seal": "tsx src/seal.ts",
+    "devnet:attest": "tsx src/attest.ts"
   },
   "dependencies": {
     "@solana/kit": "^8.3.0"
