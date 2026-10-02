@@ -77,8 +77,14 @@ secp256r1 прямо в транзакции. Список доверенных 
 тестовые ключи и УЦ; выдаёт НУЦ РК, pki.gov.kz) в каталоге `pkisdk/` — в репозиторий он не
 входит по лицензии НУЦ. KalkanCrypt берёт доверенные корни только из системного хранилища
 (в WSL — `/etc/ssl/certs`): тестовые корни ставятся скриптом SDK
-`unzip pkisdk/C/Linux/ca-certs/ca-certs_new/test2022.zip && cd test2022 && sudo bash install_test.sh`.
+`unzip -d /tmp pkisdk/C/Linux/ca-certs/ca-certs_new/test2022.zip && cd /tmp/test2022 && sudo bash install_test.sh`
+(архив распаковывается в `/tmp`, чтобы ничего из SDK не попало в репозиторий). `install_test.sh`
+делает так, что весь дистрибутив WSL доверяет тестовым корням НУЦ.
 Файлы `--ca` всё равно нужны: они фиксируют издателя (AuthorityKeyId и DN).
+
+Эксплуатация: если тестовых корней нет в системном хранилище, каждый запрос получает 401
+`bad_signature`. Файл CRL нужно обновить до его nextUpdate (у тестового CRL это 2027-02-07):
+просроченный CRL KalkanCrypt отвергает, и каждый запрос получает 500.
 
     cd attestor
     go test ./...                 # без SDK: запрос, политика, сообщение печати
