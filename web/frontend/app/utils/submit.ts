@@ -18,7 +18,7 @@ export type SubmitRpc = {
   getLatestBlockhash(): { send(): Promise<{ value: { blockhash: string; lastValidBlockHeight: bigint } }> }
   simulateTransaction(tx: string, cfg: object): { send(): Promise<{ value: { err: unknown; logs: readonly string[] | null } }> }
   sendTransaction(tx: string, cfg: object): { send(): Promise<string> }
-  getSignatureStatuses(sigs: string[]): { send(): Promise<{ value: readonly ({ err: unknown; confirmationStatus: string | null } | null)[] }> }
+  getSignatureStatuses(sigs: readonly string[]): { send(): Promise<{ value: readonly ({ err: unknown; confirmationStatus: string | null } | null)[] }> }
   getBlockHeight(cfg: object): { send(): Promise<bigint> }
 }
 
