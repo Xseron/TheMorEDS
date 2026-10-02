@@ -131,7 +131,7 @@ func (s *server) attest(w http.ResponseWriter, r *http.Request) {
 	var ae *apiError
 	if !errors.As(err, &ae) {
 		ae = &apiError{status: http.StatusInternalServerError, cause: err, Code: "kalkan_error",
-			Message: "signature check failed inside KalkanCrypt"}
+			Message: "internal error"}
 	}
 	if ae.cause != nil {
 		log.Printf("attest %s address=%s: %v", ae.Code, addr, ae.cause)

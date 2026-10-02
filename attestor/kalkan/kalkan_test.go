@@ -71,7 +71,28 @@ func TestSignVerifyCRL(t *testing.T) {
 	signer := testpki.P12(t, "Сотрудник с правом подписи", "valid")
 	other := parseCMS(t, testpki.Sign(t, signer, []byte("данные, которые первый руководитель не подписывал")))
 	second := parseCMS(t, testpki.Sign(t, signer, data))
+	// «Двойник» первого руководителя: RSA-сертификат с тем же издателем, серийным номером
+	// и SubjectKeyId, подписанный одноразовым ключом. Настоящая подпись первого руководителя
+	// с набором сертификатов [жертва, двойник] или [двойник, жертва] должна отвергаться
+	// в любом порядке: Verify опирается на то, что KC_GetCertFromCMS отдаёт тот же
+	// сертификат, который проверил VerifyData. KalkanCrypt берёт первый подходящий по sid,
+	// поэтому [жертва, двойник] — это подпись настоящего сертификата, и Verify обязан
+	// вернуть именно его (двойник лишний в наборе и не используется).
+	vc, err := x509.ParseCertificate(victim.certs(t)[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	nca, err := os.ReadFile(testpki.CAs()[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	issuerCert, err := x509.ParseCertificate(nca)
+	if err != nil {
+		t.Fatal(err)
+	}
+	twin, _ := testpki.ForgedCert(t, issuerCert, vc.SerialNumber, vc.Subject, vc.SubjectKeyId)
 	forged := []struct{ name, cms string }{
+		{"twin before victim", victim.build(t, append([][]byte{twin}, victim.certs(t)...), victim.signers(t))},
 		// Один байт значения подписи изменён; содержимое и его хэш в подписанных атрибутах целы.
 		{"corrupted signature", victim.build(t, victim.certs(t), [][]byte{corruptSignature(t, victim.signers(t)[0])})},
 		// Другой сотрудник подписал свои данные своим ключом, а sid и набор сертификатов
@@ -79,6 +100,15 @@ func TestSignVerifyCRL(t *testing.T) {
 		{"signer impersonation", other.build(t, victim.certs(t), [][]byte{withSid(t, other.signers(t)[0], victim.signers(t)[0])})},
 		// Две верные подписи одних данных: аттестатор принимает только одного подписанта.
 		{"two signers", victim.build(t, append(victim.certs(t), second.certs(t)...), append(victim.signers(t), second.signers(t)...))},
+	}
+	after, afterErr := func() ([]byte, error) {
+		_, der, err := v.Verify(victim.build(t, append(victim.certs(t), twin), victim.signers(t)))
+		return der, err
+	}()
+	if afterErr == nil && !bytes.Equal(after, victim.certs(t)[0]) {
+		t.Error("twin after victim: Verify returned a certificate other than the one that signed")
+	} else if afterErr != nil && !errors.Is(afterErr, kalkan.ErrBadSignature) {
+		t.Errorf("twin after victim: got %v (%s)", afterErr, kalkan.Message(afterErr))
 	}
 	for _, f := range forged {
 		if _, _, err := v.Verify(f.cms); !errors.Is(err, kalkan.ErrBadSignature) {

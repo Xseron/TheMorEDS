@@ -19,7 +19,10 @@
 // цепочку и срок сертификата VerifyData не проверяет. KC_GetCertFromCMS отдаёт сертификат
 // подписанта по sid SignerInfo номер N (с 1). X509ValidateCertificate с KC_USE_CRL проверяет
 // цепочку до корня с подписями УЦ, срок действия и отзыв (код KCR_CERT_STATUS_REVOKED);
-// с KC_USE_NOTHING подпись издателя не проверяется.
+// с KC_USE_NOTHING подпись издателя не проверяется. KC_USE_CRL отвергает и просроченный CRL
+// (0x08f0005d, это *Error, HTTP 500), а CheckCRL нужно вызывать только после проверки
+// издателя: на самоподписанном сертификате без AuthorityKeyId X509ValidateCertificate
+// после LoadCA падает с SIGSEGV.
 package kalkan
 
 import (
@@ -39,6 +42,8 @@ var (
 
 // Error — сбой самой библиотеки или неожиданный ответ. Error() содержит только операцию
 // и код: текст KalkanCrypt (Msg) может включать поля сертификата, поэтому в лог он не идёт.
+// Msg заполняется только для Init, LoadCA, LoadKeyStore и SignCMS; ошибки VerifyCMS
+// и CheckCRL его не несут (в тексте имя и ИИН подписанта).
 type Error struct {
 	Op   string
 	Code uint32

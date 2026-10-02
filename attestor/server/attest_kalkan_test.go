@@ -6,21 +6,16 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/asn1"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -196,40 +191,12 @@ func forged(t *testing.T, text []byte) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	now := time.Now()
-	caKey, _ := rsa.GenerateKey(rand.Reader, 2048)
-	caTmpl := &x509.Certificate{
-		SerialNumber: big.NewInt(1), RawSubject: nca.RawSubject, SubjectKeyId: nca.SubjectKeyId,
-		NotBefore: now.Add(-time.Hour), NotAfter: now.Add(24 * time.Hour),
-		IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
-	}
-	caDER, err := x509.CreateCertificate(rand.Reader, caTmpl, caTmpl, &caKey.PublicKey, caKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ca, _ := x509.ParseCertificate(caDER)
-	key, _ := rsa.GenerateKey(rand.Reader, 2048)
-	leafTmpl := &x509.Certificate{
-		SerialNumber: big.NewInt(2),
-		Subject: pkix.Name{Country: []string{"KZ"}, Organization: []string{"ТОО «Подделка»"},
-			OrganizationalUnit: []string{"BIN123456789012"}, CommonName: "FORGED"},
-		NotBefore: now.Add(-time.Hour), NotAfter: now.Add(24 * time.Hour),
-		KeyUsage:           x509.KeyUsageDigitalSignature | x509.KeyUsageContentCommitment,
-		UnknownExtKeyUsage: []asn1.ObjectIdentifier{{1, 2, 398, 3, 3, 4, 1, 2}, {1, 2, 398, 3, 3, 4, 1, 2, 1}},
-	}
-	leafDER, err := x509.CreateCertificate(rand.Reader, leafTmpl, ca, &key.PublicKey, caKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	keyDER, _ := x509.MarshalPKCS8PrivateKey(key)
-	dir := t.TempDir()
-	certPEM, keyPEM, p12 := filepath.Join(dir, "cert.pem"), filepath.Join(dir, "key.pem"), filepath.Join(dir, "forged.p12")
-	os.WriteFile(certPEM, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leafDER}), 0o600)
-	os.WriteFile(keyPEM, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0o600)
-	out, err := exec.Command("openssl", "pkcs12", "-export", "-inkey", keyPEM, "-in", certPEM, "-out", p12,
-		"-passout", "pass:"+testpki.Password, "-keypbe", "PBE-SHA1-3DES", "-certpbe", "PBE-SHA1-3DES", "-macalg", "sha1").CombinedOutput()
-	if err != nil {
-		t.Fatalf("openssl pkcs12: %v\n%s", err, out)
-	}
-	return testpki.Sign(t, p12, text)
+	subject := pkix.Name{Country: []string{"KZ"}, Organization: []string{"ТОО «Подделка»"},
+		OrganizationalUnit: []string{"BIN123456789012"}, CommonName: "FORGED"}
+	der, key := testpki.ForgedCert(t, nca, big.NewInt(2), subject, nil)
+	// KalkanCrypt строит цепочку поддельного сертификата только после того, как одна настоящая
+	// подпись НУЦ прогрела её кэш; без этого SignData падает с 0x08f00042 при запуске строки
+	// отдельно. Результат прогрева не нужен.
+	signAs("Первый руководитель", "valid")(t, text)
+	return testpki.Sign(t, testpki.P12FromKey(t, der, key), text)
 }

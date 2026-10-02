@@ -33,6 +33,14 @@ func NewVerifier(caPaths, crlPaths []string) (*Verifier, error) {
 	if len(crlPaths) == 0 {
 		return nil, errors.New("kalkan: at least one CRL is required")
 	}
+	// Файл CRL должен существовать и читаться: иначе каждый запрос получил бы 500.
+	// Разбор x509.ParseRevocationList не годится: Go отвергает CRL НУЦ («inner and outer
+	// signature algorithm identifiers don't match»).
+	for _, path := range crlPaths {
+		if _, err := os.Stat(path); err != nil {
+			return nil, fmt.Errorf("kalkan: CRL: %w", err)
+		}
+	}
 	v := &Verifier{crls: crlPaths}
 	for _, path := range caPaths {
 		raw, err := os.ReadFile(path)

@@ -38,6 +38,14 @@ func TestCheck(t *testing.T) {
 		{"no BIN", with(func(f *Fields) { f.OrgUnits = nil }), NoBIN},
 		{"name not UTF-8", with(func(f *Fields) { f.Organizations = []string{"\xff"} }), NoOrgName},
 		{"name over 128 bytes", with(func(f *Fields) { f.Organizations = []string{strings.Repeat("Ж", 65)} }), NoOrgName},
+		{"two BIN", with(func(f *Fields) { f.OrgUnits = []string{"BIN123456789012", "BIN210987654321"} }), NoBIN},
+		{"two O", with(func(f *Fields) { f.Organizations = []string{"ТОО «Ромашка»", "ТОО «Лютик»"} }), NoOrgName},
+		{"no legal entity EKU", with(func(f *Fields) { f.EKU = []string{OIDFirstHead} }), NotLegalEntity},
+	}
+	// O ровно в 128 байт (64 буквы по 2 байта) допустимо.
+	long := strings.Repeat("Ж", 64)
+	if s, err := Check(with(func(f *Fields) { f.Organizations = []string{long} }), now); err != nil || s.Name != long {
+		t.Fatalf("128-byte name: got %+v, %v", s, err)
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

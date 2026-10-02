@@ -68,7 +68,8 @@ static unsigned long kc_verify(int flags, char *cms, int cmsLen, char *data, int
 
 // Сертификат подписанта номер id (с 1, как в test.cpp из SDK): VerifyData при inCertID = 0
 // его не отдаёт (outCert пуст). KC_GetCertFromCMS выбирает сертификат по sid этого SignerInfo
-// так же, как VerifyData при проверке подписи: первый из набора с тем же IssuerAndSerialNumber.
+// так же, как VerifyData при проверке подписи: первый из набора с тем же IssuerAndSerialNumber
+// (sid вида SubjectKeyIdentifier сопоставляется с набором таким же образом).
 static unsigned long kc_cert_from_cms(char *cms, int cmsLen, int id, char *cert, int *certLen) {
 	return kc->KC_GetCertFromCMS(cms, cmsLen, id, KC_SIGN_CMS | KC_IN_BASE64 | KC_OUT_PEM, cert, certLen);
 }
@@ -203,7 +204,9 @@ func SignCMS(data []byte) (string, error) {
 // (rv VerifyData); подписант ровно один (KC_GetCertFromCMS); значение подписи над подписанными
 // атрибутами сходится с ключом сертификата, на который указывает sid (outVerifyInfo VerifyData,
 // см. signatureConfirmed). Цепочку, срок и отзыв сертификата VerifyData не проверяет — это
-// CheckCRL. Ошибки: ErrBadSignature (обёрнута вместе с *Error) или *Error — сбой библиотеки.
+// CheckCRL. Ошибки: ErrBadSignature (обычно обёрнута вместе с *Error; при нескольких
+// подписантах возвращается без обёртки) или *Error — сбой библиотеки. Текст KalkanCrypt
+// в *Error.Msg не попадает: он содержит имя и ИИН подписанта.
 func VerifyCMS(cmsB64 string) (data, certDER []byte, err error) {
 	err = run(func() error {
 		in := C.CString(cmsB64)
@@ -228,7 +231,7 @@ func VerifyCMS(cmsB64 string) (data, certDER []byte, err error) {
 			return verifyError("signer count", rv)
 		}
 		if info := cstr(outInfo, infoLen); !signatureConfirmed(info) {
-			return fmt.Errorf("%w: %w", ErrBadSignature, &Error{Op: "verify: signature value not confirmed", Msg: info})
+			return fmt.Errorf("%w: %w", ErrBadSignature, &Error{Op: "verify: signature value not confirmed"})
 		}
 		var err error
 		if data, err = base64.StdEncoding.DecodeString(strings.Join(strings.Fields(cstr(outData, dataLen)), "")); err != nil {
@@ -270,6 +273,7 @@ func signatureConfirmed(info string) bool {
 // нет сертификата подписанта, 0x8006e07b — подпись ГОСТ не сходится), перечислить их нельзя.
 func verifyError(op string, rv C.ulong) error {
 	e := lastError(op, rv)
+	e.Msg = "" // текст KalkanCrypt содержит имя и ИИН подписанта; журнал при этом очищен
 	switch rv {
 	case C.KCR_LIBRARYNOTINITIALIZED, C.KCR_MEMORY_ERROR, C.KCR_BUFFER_TOO_SMALL, C.KCR_INIT_ERROR:
 		return e
@@ -283,7 +287,13 @@ func verifyError(op string, rv C.ulong) error {
 // с KC_USE_NOTHING не проверяет подпись издателя (сертификат с DN и AuthorityKeyId УЦ НУЦ,
 // подписанный чужим ключом, она принимает). nil — сертификат действителен и не отозван;
 // ErrRevoked — отозван; ErrBadSignature (обёрнута вместе с *Error) — цепочка, подпись УЦ или
-// срок не сходятся; *Error — иное (например, CRL не загрузился).
+// срок не сходятся; *Error — иное (например, CRL не загрузился). Текст KalkanCrypt в Msg
+// не попадает (имя и ИИН подписанта).
+//
+// Ограничения. KC_USE_CRL отвергает и просроченный CRL (0x08f0005d): это *Error, то есть
+// HTTP 500 на каждый запрос, пока файл CRL не обновят. CheckCRL вызывать только после
+// проверки издателя (Verifier.Verify): на самоподписанном сертификате без AuthorityKeyId
+// X509ValidateCertificate после LoadCA падает с SIGSEGV.
 func CheckCRL(certDER []byte, crlPath string) error {
 	return run(func() error {
 		cert := C.CString(string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})))
@@ -298,9 +308,9 @@ func CheckCRL(certDER []byte, crlPath string) error {
 		case rv == C.KCR_CERT_STATUS_REVOKED:
 			return ErrRevoked
 		case rv < C.KCR_BASE, certRejected(rv):
-			return fmt.Errorf("%w: %w", ErrBadSignature, lastError("validate certificate", rv))
+			return fmt.Errorf("%w: %w", ErrBadSignature, certError(rv))
 		default:
-			return lastError("validate certificate", rv)
+			return certError(rv)
 		}
 	})
 }
@@ -316,6 +326,13 @@ func certRejected(rv C.ulong) bool {
 		return true
 	}
 	return false
+}
+
+// certError — *Error от X509ValidateCertificate без текста KalkanCrypt (имя и ИИН подписанта).
+func certError(rv C.ulong) *Error {
+	e := lastError("validate certificate", rv)
+	e.Msg = ""
+	return e
 }
 
 // lastError вызывается на потоке KalkanCrypt сразу после неудачного вызова.

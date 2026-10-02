@@ -3,9 +3,18 @@
 package testpki
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
+	"encoding/pem"
+	"math/big"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"mor/attestor/kalkan"
 )
@@ -79,4 +88,69 @@ func Sign(t testing.TB, p12 string, data []byte) string {
 		t.Fatalf("sign: %v (%s)", err, kalkan.Message(err))
 	}
 	return cms
+}
+
+// ForgedCert — RSA-сертификат «двойник»: издатель носит DN и SubjectKeyId настоящего УЦ
+// (issuer), сертификат подписан одноразовым ключом, а не ключом УЦ. serial и ski задают
+// серийный номер и SubjectKeyId (ski может быть nil); EKU — юрлицо и первый руководитель.
+// Возвращает DER сертификата и его закрытый ключ.
+func ForgedCert(t testing.TB, issuer *x509.Certificate, serial *big.Int, subject pkix.Name, ski []byte) ([]byte, *rsa.PrivateKey) {
+	t.Helper()
+	now := time.Now()
+	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caTmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1), RawSubject: issuer.RawSubject, SubjectKeyId: issuer.SubjectKeyId,
+		NotBefore: now.Add(-time.Hour), NotAfter: now.Add(24 * time.Hour),
+		IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTmpl, caTmpl, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca, err := x509.ParseCertificate(caDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leafTmpl := &x509.Certificate{
+		SerialNumber: serial, Subject: subject, SubjectKeyId: ski,
+		NotBefore: now.Add(-time.Hour), NotAfter: now.Add(24 * time.Hour),
+		KeyUsage:           x509.KeyUsageDigitalSignature | x509.KeyUsageContentCommitment,
+		UnknownExtKeyUsage: []asn1.ObjectIdentifier{{1, 2, 398, 3, 3, 4, 1, 2}, {1, 2, 398, 3, 3, 4, 1, 2, 1}},
+	}
+	leafDER, err := x509.CreateCertificate(rand.Reader, leafTmpl, ca, &key.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return leafDER, key
+}
+
+// P12FromKey собирает PKCS#12 из сертификата и ключа через openssl (старые алгоритмы —
+// их читает KalkanCrypt) и возвращает путь к файлу во временном каталоге теста.
+func P12FromKey(t testing.TB, certDER []byte, key *rsa.PrivateKey) string {
+	t.Helper()
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	certPEM, keyPEM, p12 := filepath.Join(dir, "cert.pem"), filepath.Join(dir, "key.pem"), filepath.Join(dir, "forged.p12")
+	if err := os.WriteFile(certPEM, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPEM, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("openssl", "pkcs12", "-export", "-inkey", keyPEM, "-in", certPEM, "-out", p12,
+		"-passout", "pass:"+Password, "-keypbe", "PBE-SHA1-3DES", "-certpbe", "PBE-SHA1-3DES", "-macalg", "sha1").CombinedOutput()
+	if err != nil {
+		t.Fatalf("openssl pkcs12: %v: %s", err, out)
+	}
+	return p12
 }
