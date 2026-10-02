@@ -1,0 +1,48 @@
+// Package kalkan — обёртка над KalkanCrypt, сертифицированным СКЗИ НУЦ РК, через cgo.
+// Вся криптография аттестатора идёт через неё: проверка CMS, цепочки до УЦ НУЦ и отзыва
+// по CRL, а также подпись в dev-команде и тестах. Код с cgo собирается только с тегом
+// kalkan (нужен SDK НУЦ в pkisdk/); этот файл — без тега, чтобы ошибки были видны
+// пакетам, которые собираются без SDK.
+//
+// Итог спайка: работает сертифицированная KalkanCrypt 2.0.2 (2.0.14 ведёт себя так же).
+// Библиотека оставляет неопределёнными функции OpenSSL (SRP_*, COMP_*, CT_*), поэтому
+// dlopen идёт с RTLD_LAZY. Доверенные корни она берёт только из системного хранилища
+// (/etc/ssl/certs/ca-certificates.crt; SDK: ca-certs_new/test2022.zip, install_test.sh):
+// без них SignCMS падает с 0x08f00042, а LoadCA одна не помогает. VerifyData проверяет
+// подпись, срок и цепочку, но отозванный сертификат пропускает: отзыв даёт только
+// X509ValidateCertificate с KC_USE_CRL (код KCR_CERT_STATUS_REVOKED), его вызывает CheckCRL.
+// Сертификат подписанта VerifyData не отдаёт (outCert пуст), он берётся через
+// KC_GetCertFromCMS. Флаги: KC_SIGN_CMS | KC_IN_BASE64 (| KC_OUT_BASE64 для данных).
+package kalkan
+
+import (
+	"errors"
+	"fmt"
+)
+
+var (
+	// ErrBadSignature — подпись CMS не сходится, сертификат не ведёт к доверенному УЦ НУЦ
+	// или его срок не начался либо истёк.
+	ErrBadSignature = errors.New("kalkan: CMS signature or certificate chain is invalid")
+	// ErrRevoked — сертификат подписанта есть в CRL НУЦ.
+	ErrRevoked = errors.New("kalkan: signer certificate is revoked")
+)
+
+// Error — сбой самой библиотеки или неожиданный ответ. Error() содержит только операцию
+// и код: текст KalkanCrypt (Msg) может включать поля сертификата, поэтому в лог он не идёт.
+type Error struct {
+	Op   string
+	Code uint32
+	Msg  string
+}
+
+func (e *Error) Error() string { return fmt.Sprintf("kalkan %s: 0x%08x", e.Op, e.Code) }
+
+// Message — текст ошибки KalkanCrypt для диагностики в dev-команде и тестах.
+func Message(err error) string {
+	var e *Error
+	if errors.As(err, &e) {
+		return e.Msg
+	}
+	return ""
+}
