@@ -1,7 +1,7 @@
 // Чистые кодеки реестра Mör: адреса, PDA, разбор аккаунтов. Без сети и без Nuxt.
 import {
   address, getAddressDecoder, getAddressEncoder, getProgramDerivedAddress,
-  type Address,
+  type Address, AccountRole, type Instruction,
 } from '@solana/kit'
 
 export type Ids = { registry: Address; hook: Address; mint: Address }
@@ -116,5 +116,115 @@ export function decodeTrustService(d: Uint8Array): TrustService {
     kind: d[8] as TrustKind,
     name: new TextDecoder().decode(d.subarray(110, 110 + nameLen)),
     country: new TextDecoder().decode(d.subarray(110 + nameLen, 112 + nameLen)),
+  }
+}
+
+// sha256("global:<name>")[0..8], посчитано заранее; тест сверяет
+export const DISCRIMINATORS = {
+  registerSealAttested: Uint8Array.of(7, 232, 40, 100, 33, 134, 52, 167),
+  revokeSeal: Uint8Array.of(188, 60, 180, 173, 242, 76, 128, 31),
+}
+
+export const borshString = (s: string) => { const b = utf8(s); return concat(u32le(b.length), b) }
+
+export type SealMessageFields = {
+  program: Address
+  address: Address
+  kind: AddressKind
+  controller: Address
+  trustLevel: TrustLevel
+  trustService: Address
+  certificate: Address | null // у аттестатора null: 32 нулевых байта
+  jurisdiction: string
+  identifierHash: Uint8Array
+  expiresAt: bigint
+  signDeadline: bigint
+  name: string
+}
+
+// Байт в байт как SealMessage::to_bytes в programs/mor-registry/src/seal_message.rs
+export function sealMessage(f: SealMessageFields): Uint8Array {
+  const name = utf8(f.name)
+  if (name.length < 1 || name.length > 128) throw new Error('the company name must be 1 to 128 UTF-8 bytes')
+  return concat(
+    utf8('MOR-SEAL-V1'), addressBytes(f.program), addressBytes(f.address), Uint8Array.of(f.kind),
+    addressBytes(f.controller), Uint8Array.of(f.trustLevel), addressBytes(f.trustService),
+    f.certificate ? addressBytes(f.certificate) : new Uint8Array(32),
+    utf8(f.jurisdiction), Uint8Array.of(0), f.identifierHash, i64le(f.expiresAt), i64le(f.signDeadline),
+    Uint8Array.of(name.length), name,
+  )
+}
+
+const ro = (a: Address) => ({ address: a, role: AccountRole.READONLY })
+
+// Самодостаточная инструкция прекомпайла: все индексы 0xFFFF, ключ с 16-го байта, затем подпись и сообщение
+export function ed25519Instruction(pubkey: Uint8Array, sig: Uint8Array, msg: Uint8Array): Instruction {
+  const header = new Uint8Array(16)
+  const dv = new DataView(header.buffer)
+  header[0] = 1
+  ;[48, 0xffff, 16, 0xffff, 112, msg.length, 0xffff].forEach((v, i) => dv.setUint16(2 + 2 * i, v, true))
+  return { programAddress: ED25519_PROGRAM, accounts: [], data: concat(header, pubkey, sig, msg) }
+}
+
+export function registerSealAttestedInstruction(ids: Ids, a: {
+  controller: Address; address: Address; trustService: Address; seal: Address; kind: AddressKind
+  identifierHash: Uint8Array; name: string; expiresAt: bigint; signDeadline: bigint
+}): Instruction {
+  return {
+    programAddress: ids.registry,
+    accounts: [
+      { address: a.controller, role: AccountRole.WRITABLE_SIGNER },
+      ro(a.address),
+      ro(ids.registry), // Option<program_data> = None передаётся адресом программы
+      ro(a.trustService),
+      { address: a.seal, role: AccountRole.WRITABLE },
+      ro(INSTRUCTIONS_SYSVAR),
+      ro(SYSTEM_PROGRAM),
+    ],
+    data: concat(DISCRIMINATORS.registerSealAttested, Uint8Array.of(a.kind), a.identifierHash, borshString(a.name), i64le(a.expiresAt), i64le(a.signDeadline)),
+  }
+}
+
+export function revokeSealInstruction(ids: Ids, a: { signer: Address; address: Address; seal: Address }): Instruction {
+  return {
+    programAddress: ids.registry,
+    accounts: [
+      { address: a.signer, role: AccountRole.WRITABLE_SIGNER },
+      ro(a.address),
+      ro(ids.registry),
+      { address: a.seal, role: AccountRole.WRITABLE },
+    ],
+    data: DISCRIMINATORS.revokeSeal,
+  }
+}
+
+// Associated Token Account: CreateIdempotent (1)
+export function createAtaIdempotentInstruction(ids: Ids, payer: Address, ata: Address, owner: Address): Instruction {
+  return {
+    programAddress: ATA_PROGRAM,
+    accounts: [
+      { address: payer, role: AccountRole.WRITABLE_SIGNER },
+      { address: ata, role: AccountRole.WRITABLE },
+      ro(owner), ro(ids.mint), ro(SYSTEM_PROGRAM), ro(TOKEN_2022),
+    ],
+    data: Uint8Array.of(1),
+  }
+}
+
+// TransferChecked (12), decimals 0, плюс аккаунты хука в том порядке, в каком их ждёт sealed-transfer
+export function transferCheckedInstruction(ids: Ids, a: {
+  source: Address; destination: Address; authority: Address; amount: bigint
+  policy: Address; recipientSeal: Address; extraMetas: Address
+}): Instruction {
+  return {
+    programAddress: TOKEN_2022,
+    accounts: [
+      { address: a.source, role: AccountRole.WRITABLE },
+      ro(ids.mint),
+      { address: a.destination, role: AccountRole.WRITABLE },
+      { address: a.authority, role: AccountRole.READONLY_SIGNER },
+      ro(ids.registry), ro(a.policy), ro(a.recipientSeal), ro(ids.hook), ro(a.extraMetas),
+    ],
+    data: concat(Uint8Array.of(12), u64le(a.amount), Uint8Array.of(0)),
   }
 }
