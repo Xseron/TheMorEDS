@@ -20,9 +20,16 @@ const result = ref<Lookup | null>(null)
 const error = ref('')
 
 async function load() {
+  const t = text.value
   result.value = null
   error.value = ''
-  try { result.value = await lookup(text.value) } catch (e) { error.value = describeError(e, { attestorUrl }) }
+  try {
+    const r = await lookup(t)
+    if (t === text.value) result.value = r
+  } catch (e) {
+    // Ответ по уже покинутому адресу не показываем
+    if (t === text.value) error.value = describeError(e, { attestorUrl })
+  }
 }
 watch(text, load, { immediate: true })
 

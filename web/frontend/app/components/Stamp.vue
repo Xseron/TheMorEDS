@@ -20,7 +20,7 @@
       <rect x="4" y="4" width="216" height="64" />
       <rect x="11" y="11" width="202" height="50" stroke-width="1.5" />
     </g>
-    <text :filter="`url(#ink-${uid})`" x="112" y="46" text-anchor="middle" :fill="color" font-size="24" font-weight="600" letter-spacing="3" font-family="'STIX Two Text', serif">{{ label }}</text>
+    <text :filter="`url(#ink-${uid})`" x="112" y="46" text-anchor="middle" :fill="color" font-size="24" font-weight="600" letter-spacing="3" font-family="'STIX Two Text', serif" :textLength="fitted ? 190 : undefined" :lengthAdjust="fitted ? 'spacingAndGlyphs' : undefined">{{ label }}</text>
   </svg>
 </template>
 
@@ -28,6 +28,8 @@
 const props = withDefaults(defineProps<{ kind: 'registry' | 'expired' | 'refused'; label?: string; size?: number }>(), { label: '', size: 160 })
 const uid = useId()
 const color = computed(() => (props.kind === 'expired' ? '#5F5F5C' : '#B42318'))
+// Длинная надпись (NOT AN ADDRESS) не лезет в рамку, поэтому её сжимают до 190; короткие остаются как есть
+const fitted = computed(() => props.label.length > 8)
 // Кромка с 12 волнами, как у логотипа
 const scallop = computed(() => {
   const pts: string[] = []

@@ -26,7 +26,8 @@ export function useRegistry() {
     const trustData = await accountData(seal.trustService)
     const now = BigInt(Math.floor(Date.now() / 1000))
     return {
-      status: seal.expiresAt < now ? 'expired' : 'valid',
+      // Хук отвергает печать при now >= expires_at, выписка совпадает с ним на границе
+      status: seal.expiresAt <= now ? 'expired' : 'valid',
       address: a, sealPda: pda, seal,
       trust: trustData ? decodeTrustService(trustData) : null,
       trustIsTest: TEST_TRUST_SERVICES.includes(seal.trustService),
