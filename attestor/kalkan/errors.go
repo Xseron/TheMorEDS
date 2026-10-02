@@ -8,11 +8,18 @@
 // Библиотека оставляет неопределёнными функции OpenSSL (SRP_*, COMP_*, CT_*), поэтому
 // dlopen идёт с RTLD_LAZY. Доверенные корни она берёт только из системного хранилища
 // (/etc/ssl/certs/ca-certificates.crt; SDK: ca-certs_new/test2022.zip, install_test.sh):
-// без них SignCMS падает с 0x08f00042, а LoadCA одна не помогает. VerifyData проверяет
-// подпись, срок и цепочку, но отозванный сертификат пропускает: отзыв даёт только
-// X509ValidateCertificate с KC_USE_CRL (код KCR_CERT_STATUS_REVOKED), его вызывает CheckCRL.
-// Сертификат подписанта VerifyData не отдаёт (outCert пуст), он берётся через
-// KC_GetCertFromCMS. Флаги: KC_SIGN_CMS | KC_IN_BASE64 (| KC_OUT_BASE64 для данных).
+// без них SignCMS падает с 0x08f00042, а LoadCA одна не помогает. Флаги: KC_SIGN_CMS |
+// KC_IN_BASE64 (| KC_OUT_BASE64 для данных).
+//
+// Что проверяет каждый вызов (проверено на испорченной подписи, подмене sid, двух
+// подписантах и сертификате с DN и AuthorityKeyId УЦ НУЦ, подписанном чужим ключом):
+// VerifyData отвечает rv ≠ 0, если содержимое не сходится с хэшем в подписанных атрибутах
+// или signingCertificateV2 — с сертификатом; неверное значение подписи единственного
+// подписанта даёт rv = 0, и его итог виден только в outVerifyInfo (строка «Verify - OK»);
+// цепочку и срок сертификата VerifyData не проверяет. KC_GetCertFromCMS отдаёт сертификат
+// подписанта по sid SignerInfo номер N (с 1). X509ValidateCertificate с KC_USE_CRL проверяет
+// цепочку до корня с подписями УЦ, срок действия и отзыв (код KCR_CERT_STATUS_REVOKED);
+// с KC_USE_NOTHING подпись издателя не проверяется.
 package kalkan
 
 import (
@@ -21,8 +28,10 @@ import (
 )
 
 var (
-	// ErrBadSignature — подпись CMS не сходится, сертификат не ведёт к доверенному УЦ НУЦ
-	// или его срок не начался либо истёк.
+	// ErrBadSignature — CMS отвергнута: KalkanCrypt не подтвердила значение подписи, хэш
+	// содержимого или signingCertificateV2 (VerifyData); подписантов не ровно один; издатель
+	// сертификата не из конфига; X509ValidateCertificate отвергла цепочку, подпись УЦ
+	// или срок действия сертификата.
 	ErrBadSignature = errors.New("kalkan: CMS signature or certificate chain is invalid")
 	// ErrRevoked — сертификат подписанта есть в CRL НУЦ.
 	ErrRevoked = errors.New("kalkan: signer certificate is revoked")

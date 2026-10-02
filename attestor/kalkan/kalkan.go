@@ -6,25 +6,42 @@ package kalkan
 #cgo CFLAGS: -I${SRCDIR}/../../pkisdk/C/Linux/C/test
 #cgo LDFLAGS: -ldl
 #include <dlfcn.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "KalkanCrypt.h"
 
 static stKCFunctionsType *kc;
+static char kc_open_error[512];
 
-static int kc_open(const char *path) {
-	// Fallback (spike): 2.0.2 leaves OpenSSL SRP_*, COMP_*, CT_* functions undefined (they are
-	// not used for CMS), so eager binding fails with "undefined symbol: SRP_Calc_A".
-	// Bind lazily.
+// kc_open загружает библиотеку и берёт таблицу функций; NULL — успех, иначе текст ошибки.
+//
+// RTLD_LAZY (спайк): 2.0.2 оставляет неопределёнными функции OpenSSL SRP_*, COMP_*, CT_*,
+// и с RTLD_NOW dlopen падает на «undefined symbol: SRP_Calc_A». Для CMS, сертификатов и CRL
+// они не нужны. Риск: если библиотека всё же вызовет такую функцию, динамический компоновщик
+// завершит процесс (symbol lookup error) — Go это не перехватит и не восстановится.
+// RTLD_GLOBAL: неразрешённые имена могут связаться с другим OpenSSL, загруженным в процесс
+// позже; аттестатор других библиотек OpenSSL не загружает.
+static const char *kc_open(const char *path) {
 	void *h = dlopen(path, RTLD_LAZY | RTLD_GLOBAL);
-	if (!h) return 1;
+	if (!h) {
+		snprintf(kc_open_error, sizeof kc_open_error, "%s", dlerror());
+		return kc_open_error;
+	}
 	int (*list)(stKCFunctionsType **) = (int (*)(stKCFunctionsType **))dlsym(h, "KC_GetFunctionList");
-	if (!list) return 2;
+	if (!list) {
+		const char *e = dlerror();
+		snprintf(kc_open_error, sizeof kc_open_error, "%s", e ? e : "KC_GetFunctionList not found");
+		dlclose(h);
+		return kc_open_error;
+	}
 	list(&kc);
-	return kc ? 0 : 3;
+	if (!kc) {
+		dlclose(h);
+		return "KC_GetFunctionList returned no function table";
+	}
+	return NULL;
 }
-
-static const char *kc_dlerror(void) { return dlerror(); }
 
 static unsigned long kc_init(void) { return kc->KC_Init(); }
 
@@ -41,18 +58,23 @@ static unsigned long kc_sign(int flags, char *in, int inLen, unsigned char *out,
 	return kc->SignData("", flags, in, inLen, none, 0, out, outLen);
 }
 
+// VerifyData для присоединённой CMS. rv = 0 не значит, что подпись верна: итог проверки
+// значения подписи — только в info (см. signatureConfirmed).
 static unsigned long kc_verify(int flags, char *cms, int cmsLen, char *data, int *dataLen,
 		char *info, int *infoLen, char *cert, int *certLen) {
 	return kc->VerifyData("", flags, "", 0, (unsigned char *)cms, cmsLen, data, dataLen,
 		info, infoLen, 0, cert, certLen);
 }
 
-// Fallback (spike): VerifyData returns an empty outCert for CMS here, so the signer
-// certificate is taken from the CMS separately (signature number 1, as in the SDK test.cpp).
-static unsigned long kc_cert_from_cms(char *cms, int cmsLen, char *cert, int *certLen) {
-	return kc->KC_GetCertFromCMS(cms, cmsLen, 1, KC_SIGN_CMS | KC_IN_BASE64 | KC_OUT_PEM, cert, certLen);
+// Сертификат подписанта номер id (с 1, как в test.cpp из SDK): VerifyData при inCertID = 0
+// его не отдаёт (outCert пуст). KC_GetCertFromCMS выбирает сертификат по sid этого SignerInfo
+// так же, как VerifyData при проверке подписи: первый из набора с тем же IssuerAndSerialNumber.
+static unsigned long kc_cert_from_cms(char *cms, int cmsLen, int id, char *cert, int *certLen) {
+	return kc->KC_GetCertFromCMS(cms, cmsLen, id, KC_SIGN_CMS | KC_IN_BASE64 | KC_OUT_PEM, cert, certLen);
 }
 
+// X509ValidateCertificate с KC_USE_CRL: цепочка до доверенного корня с проверкой подписей УЦ,
+// срок действия и отзыв по файлу CRL.
 static unsigned long kc_check_crl(char *cert, int certLen, char *crl, char *info, int *infoLen) {
 	int ocspLen = 0;
 	return kc->X509ValidateCertificate(cert, certLen, KC_USE_CRL, crl, 0, info, infoLen, 0, NULL, &ocspLen);
@@ -68,6 +90,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"slices"
 	"strings"
 	"unsafe"
 )
@@ -111,8 +134,8 @@ func Init(libPath string) error {
 	err := run(func() error {
 		p := C.CString(libPath)
 		defer C.free(unsafe.Pointer(p))
-		if C.kc_open(p) != 0 {
-			return fmt.Errorf("kalkan: load %s: %s", libPath, C.GoString(C.kc_dlerror()))
+		if e := C.kc_open(p); e != nil {
+			return fmt.Errorf("kalkan: load %s: %s", libPath, C.GoString(e))
 		}
 		if rv := C.kc_init(); rv != 0 {
 			return lastError("init", rv)
@@ -174,30 +197,46 @@ func SignCMS(data []byte) (string, error) {
 	return cms, err
 }
 
-// VerifyCMS проверяет присоединённую CMS (base64): подпись ГОСТ, срок сертификата и цепочку
-// до доверенного УЦ. Возвращает подписанные данные и сертификат подписанта (DER).
+// VerifyCMS проверяет присоединённую CMS (base64) средствами KalkanCrypt и возвращает
+// подписанные данные и сертификат подписанта (DER). Проверяется: содержимое сходится с хэшем
+// в подписанных атрибутах и signingCertificateV2 (если есть) указывает на сертификат подписанта
+// (rv VerifyData); подписант ровно один (KC_GetCertFromCMS); значение подписи над подписанными
+// атрибутами сходится с ключом сертификата, на который указывает sid (outVerifyInfo VerifyData,
+// см. signatureConfirmed). Цепочку, срок и отзыв сертификата VerifyData не проверяет — это
+// CheckCRL. Ошибки: ErrBadSignature (обёрнута вместе с *Error) или *Error — сбой библиотеки.
 func VerifyCMS(cmsB64 string) (data, certDER []byte, err error) {
 	err = run(func() error {
 		in := C.CString(cmsB64)
 		defer C.free(unsafe.Pointer(in))
+		inLen := C.int(len(cmsB64))
 		outData, outInfo, outCert := make([]byte, bufSize), make([]byte, bufSize), make([]byte, bufSize)
 		dataLen, infoLen, certLen := C.int(bufSize), C.int(bufSize), C.int(bufSize)
-		rv := C.kc_verify(verifyFlags, in, C.int(len(cmsB64)), cbuf(outData), &dataLen,
-			cbuf(outInfo), &infoLen, cbuf(outCert), &certLen)
-		if rv != 0 {
-			e := lastError("verify", rv)
-			if libraryFailure(rv) {
-				return e
-			}
-			return fmt.Errorf("%w: %w", ErrBadSignature, e)
+		if rv := C.kc_verify(verifyFlags, in, inLen, cbuf(outData), &dataLen,
+			cbuf(outInfo), &infoLen, cbuf(outCert), &certLen); rv != 0 {
+			return verifyError("verify", rv)
+		}
+		// Второго подписанта быть не должно: выбор сертификата не зависит от того, как
+		// KalkanCrypt обходит несколько SignerInfo (при нескольких подписантах текст о неверной
+		// подписи в outVerifyInfo затирается следующим).
+		certLen = C.int(bufSize)
+		switch rv := C.kc_cert_from_cms(in, inLen, 2, cbuf(outCert), &certLen); rv {
+		case C.KCR_CERTNOTFOUND:
+			lastError("signer count", rv) // ожидаемая ошибка; чтение очищает журнал KalkanCrypt
+		case 0:
+			return fmt.Errorf("%w: CMS has more than one signer", ErrBadSignature)
+		default:
+			return verifyError("signer count", rv)
+		}
+		if info := cstr(outInfo, infoLen); !signatureConfirmed(info) {
+			return fmt.Errorf("%w: %w", ErrBadSignature, &Error{Op: "verify: signature value not confirmed", Msg: info})
 		}
 		var err error
 		if data, err = base64.StdEncoding.DecodeString(strings.Join(strings.Fields(cstr(outData, dataLen)), "")); err != nil {
 			return &Error{Op: "verify: signed data is not base64"}
 		}
 		certLen = C.int(bufSize)
-		if rv := C.kc_cert_from_cms(in, C.int(len(cmsB64)), cbuf(outCert), &certLen); rv != 0 {
-			return lastError("signer certificate", rv)
+		if rv := C.kc_cert_from_cms(in, inLen, 1, cbuf(outCert), &certLen); rv != 0 {
+			return verifyError("signer certificate", rv)
 		}
 		if certDER, err = decodeCert(outCert[:clamp(certLen)]); err != nil {
 			return &Error{Op: "verify: signer certificate"}
@@ -210,7 +249,41 @@ func VerifyCMS(cmsB64 string) (data, certDER []byte, err error) {
 	return data, certDER, nil
 }
 
-// CheckCRL проверяет сертификат (DER) по файлу CRL: nil — не отозван, ErrRevoked — отозван.
+// signatureConfirmed — итог проверки значения подписи из outVerifyInfo VerifyData.
+// KalkanCrypt 2.0.2 (и 2.0.14) возвращает rv = 0, когда значение подписи единственного
+// подписанта не сходится с ключом сертификата: при испорченной подписи и при подмене sid
+// на чужой сертификат текст — «Signature N 1», «CMS Verify - OK», без строки «Verify - OK».
+// Так же ведут себя detached-режим, KC_IN_DER и KC_IN_PEM, KC_WITH_CERT, inCertID = 1.
+// Поэтому принимается только точный текст одной подтверждённой подписи; строка CAdES-BES
+// есть, если в подписи есть signingCertificateV2. Любой другой текст — плохая подпись.
+func signatureConfirmed(info string) bool {
+	lines := strings.Split(strings.TrimRight(info, "\n"), "\n")
+	if len(lines) == 4 && lines[1] == "- CAdES-BES: verify signer certificate hash - OK." {
+		lines = slices.Delete(lines, 1, 2)
+	}
+	return slices.Equal(lines, []string{"Signature N 1", "Verify - OK", "CMS Verify - OK"})
+}
+
+// verifyError — отказ VerifyData или KC_GetCertFromCMS. Это плохая подпись при любом коде,
+// кроме сбоев самой библиотеки (они дают *Error): VerifyData отдаёт и коды KalkanCrypt,
+// и упакованные коды OpenSSL (0x2e09a09e — содержимое не сходится с хэшем, 0x2e09d08a —
+// нет сертификата подписанта, 0x8006e07b — подпись ГОСТ не сходится), перечислить их нельзя.
+func verifyError(op string, rv C.ulong) error {
+	e := lastError(op, rv)
+	switch rv {
+	case C.KCR_LIBRARYNOTINITIALIZED, C.KCR_MEMORY_ERROR, C.KCR_BUFFER_TOO_SMALL, C.KCR_INIT_ERROR:
+		return e
+	}
+	return fmt.Errorf("%w: %w", ErrBadSignature, e)
+}
+
+// CheckCRL проверяет сертификат (DER) функцией X509ValidateCertificate с KC_USE_CRL: цепочка
+// до доверенного корня с проверкой подписей УЦ, срок действия и отзыв по файлу CRL. Это
+// единственная проверка цепочки: VerifyData цепочку не проверяет, а X509ValidateCertificate
+// с KC_USE_NOTHING не проверяет подпись издателя (сертификат с DN и AuthorityKeyId УЦ НУЦ,
+// подписанный чужим ключом, она принимает). nil — сертификат действителен и не отозван;
+// ErrRevoked — отозван; ErrBadSignature (обёрнута вместе с *Error) — цепочка, подпись УЦ или
+// срок не сходятся; *Error — иное (например, CRL не загрузился).
 func CheckCRL(certDER []byte, crlPath string) error {
 	return run(func() error {
 		cert := C.CString(string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})))
@@ -219,24 +292,27 @@ func CheckCRL(certDER []byte, crlPath string) error {
 		defer C.free(unsafe.Pointer(crl))
 		info := make([]byte, 8192)
 		n := C.int(len(info))
-		switch rv := C.kc_check_crl(cert, C.int(C.strlen(cert)), crl, cbuf(info), &n); rv {
-		case 0:
+		switch rv := C.kc_check_crl(cert, C.int(C.strlen(cert)), crl, cbuf(info), &n); {
+		case rv == 0:
 			return nil
-		case C.KCR_CERT_STATUS_REVOKED:
+		case rv == C.KCR_CERT_STATUS_REVOKED:
 			return ErrRevoked
+		case rv < C.KCR_BASE, certRejected(rv):
+			return fmt.Errorf("%w: %w", ErrBadSignature, lastError("validate certificate", rv))
 		default:
-			return lastError("CRL", rv)
+			return lastError("validate certificate", rv)
 		}
 	})
 }
 
-// libraryFailure — коды сбоев самой библиотеки, а не подписи: они дают kalkan_error,
-// а не bad_signature.
-func libraryFailure(rv C.ulong) bool {
+// certRejected — коды KalkanCrypt (от KCR_BASE), которыми X509ValidateCertificate отвергает
+// сам сертификат; коды меньше KCR_BASE — X509_V_ERR OpenSSL (например, 7 — подпись УЦ
+// не сходится), CheckCRL считает отказом их все. 0x08f00042 (KCR_CERTTIMEINVALID) приходит
+// и для истёкшего сертификата НУЦ, и для сертификата, издателя которого нет в хранилище.
+func certRejected(rv C.ulong) bool {
 	switch rv {
-	case C.KCR_INIT_ERROR, C.KCR_MEMORY_ERROR, C.KCR_BUFFER_TOO_SMALL, C.KCR_INVALID_FLAG,
-		C.KCR_INVALID_FLAGS, C.KCR_ENGINE_INITERR, C.KCR_LIBRARYNOTINITIALIZED,
-		C.KCR_ENGINELOADERR, C.KCR_PARAM_ERROR:
+	case C.KCR_CERTTIMEINVALID, C.KCR_CERTEXPIRED, C.KCR_CERTWRONGDATE, C.KCR_CHECKCHAINERROR,
+		C.KCR_CA_CERT_NOT_FOUND, C.KCR_CACERTNOTFOUND:
 		return true
 	}
 	return false

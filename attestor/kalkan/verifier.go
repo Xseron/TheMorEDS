@@ -11,17 +11,24 @@ import (
 	"slices"
 )
 
-// Verifier — проверка CMS для аттестатора. KalkanCrypt проверяет подпись, цепочку и отзыв
-// по CRL; кроме того, AuthorityKeyId подписанта должен совпасть с SubjectKeyId одного из УЦ
-// из конфига: KalkanCrypt строит цепочки и по системному хранилищу (/etc/ssl/certs), а печать
-// ставят только сертификаты настроенного УЦ НУЦ.
+// Verifier — проверка CMS для аттестатора. Подпись, цепочку с подписями УЦ, срок и отзыв
+// проверяет KalkanCrypt (VerifyCMS, CheckCRL); crypto/x509 только читает поля сертификата.
+// Кроме того, издатель подписанта — один из УЦ из конфига: AuthorityKeyId равен его
+// SubjectKeyId, а Issuer — его Subject (байт в байт), и сертификат не самоизданный.
+// KalkanCrypt строит цепочки и по системному хранилищу (/etc/ssl/certs), а печать ставят
+// только сертификаты настроенного УЦ НУЦ. Заодно в X509ValidateCertificate не попадают
+// сертификаты чужих издателей: на самоподписанном сертификате без AuthorityKeyId после LoadCA
+// она падает (SIGSEGV), а на самоподписанном с AuthorityKeyId УЦ НУЦ отвечает кодом ошибки
+// загрузки CRL, а не отказом сертификату.
 type Verifier struct {
-	crls      []string
-	issuerIDs [][]byte
+	crls    []string
+	issuers []issuer
 }
 
+type issuer struct{ keyID, subject []byte }
+
 // NewVerifier загружает УЦ в KalkanCrypt (самоподписанный — как корневой, остальные — как
-// промежуточные) и запоминает их SubjectKeyId. Init вызывается раньше.
+// промежуточные) и запоминает их SubjectKeyId и Subject. Init вызывается раньше.
 func NewVerifier(caPaths, crlPaths []string) (*Verifier, error) {
 	if len(crlPaths) == 0 {
 		return nil, errors.New("kalkan: at least one CRL is required")
@@ -46,13 +53,18 @@ func NewVerifier(caPaths, crlPaths []string) (*Verifier, error) {
 		if err := LoadCA(path, bytes.Equal(ca.RawSubject, ca.RawIssuer)); err != nil {
 			return nil, err
 		}
-		v.issuerIDs = append(v.issuerIDs, ca.SubjectKeyId)
+		v.issuers = append(v.issuers, issuer{keyID: ca.SubjectKeyId, subject: ca.RawSubject})
 	}
 	return v, nil
 }
 
-// Verify проверяет CMS (base64) и возвращает подписанные данные и сертификат подписанта (DER).
-// Ошибки: ErrBadSignature, ErrRevoked или *Error.
+// Verify проверяет присоединённую CMS (base64) и возвращает подписанные данные и сертификат
+// подписанта (DER). Шаги: VerifyCMS — один подписант, значение подписи, хэш содержимого;
+// привязка к УЦ из конфига; для каждого CRL — CheckCRL: цепочка с подписями УЦ, срок, отзыв.
+//
+// Ошибки: ErrBadSignature, ErrRevoked или *Error. ErrBadSignature часто обёрнута вместе
+// с *Error (fmt.Errorf("%w: %w", ErrBadSignature, e)), и тогда errors.As(err, &kalkanErr)
+// тоже истинно: сначала проверять errors.Is(err, ErrBadSignature), потом errors.As.
 func (v *Verifier) Verify(cmsB64 string) (data, certDER []byte, err error) {
 	data, certDER, err = VerifyCMS(cmsB64)
 	if err != nil {
@@ -62,7 +74,10 @@ func (v *Verifier) Verify(cmsB64 string) (data, certDER []byte, err error) {
 	if err != nil {
 		return nil, nil, &Error{Op: "parse signer certificate"}
 	}
-	if !slices.ContainsFunc(v.issuerIDs, func(id []byte) bool { return bytes.Equal(id, cert.AuthorityKeyId) }) {
+	selfIssued := bytes.Equal(cert.RawIssuer, cert.RawSubject)
+	if selfIssued || !slices.ContainsFunc(v.issuers, func(ca issuer) bool {
+		return bytes.Equal(ca.keyID, cert.AuthorityKeyId) && bytes.Equal(ca.subject, cert.RawIssuer)
+	}) {
 		return nil, nil, fmt.Errorf("%w: issuer is not a configured NCA CA", ErrBadSignature)
 	}
 	for _, crl := range v.crls {
