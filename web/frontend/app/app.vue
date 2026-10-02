@@ -10,7 +10,9 @@
           <NuxtLink to="/seal">Seal</NuxtLink>
           <NuxtLink to="/transfer">Transfer</NuxtLink>
         </nav>
-        <div id="wallet-slot" class="ml-auto" />
+        <div class="ml-auto">
+          <ClientOnly><WalletButton /></ClientOnly>
+        </div>
       </div>
     </header>
     <main class="container-page flex-1 py-10">
