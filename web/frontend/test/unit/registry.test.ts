@@ -41,6 +41,15 @@ describe('decodeSeal', () => {
     d[0] ^= 1
     expect(() => decodeSeal(d)).toThrow(NotASeal)
     expect(() => decodeSeal(bytes(fx.trustAttestor))).toThrow(NotASeal)
+    // длина имени по смещению 190: больше 128 и за концом буфера
+    const long = bytes(fx.sealA)
+    new DataView(long.buffer).setUint32(190, 129, true)
+    expect(() => decodeSeal(long)).toThrow(NotASeal)
+    const past = bytes(fx.sealA)
+    new DataView(past.buffer).setUint32(190, past.length, true)
+    expect(() => decodeSeal(past)).toThrow(NotASeal)
+    // аккаунт дополнен нулями до 322 байт, поэтому границу буфера проверяем обрезкой: имя 17 байт, данных на 16
+    expect(() => decodeSeal(bytes(fx.sealA).subarray(0, 194 + 16))).toThrow(NotASeal)
   })
 })
 

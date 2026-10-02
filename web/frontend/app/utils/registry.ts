@@ -36,7 +36,7 @@ export enum TrustLevel { Attestor = 0, Trustless = 1 }
 export enum TrustKind { P256Ca = 0, Attestor = 1 }
 
 export const utf8 = (s: string) => new TextEncoder().encode(s)
-export function concat(...parts: Uint8Array[]): Uint8Array {
+export function concat(...parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0))
   let o = 0
   for (const p of parts) { out.set(p, o); o += p.length }
@@ -96,7 +96,7 @@ export function decodeSeal(d: Uint8Array): Seal {
     controller: key(41),
     trustLevel: d[73] as TrustLevel,
     jurisdiction: new TextDecoder().decode(d.subarray(74, 76)),
-    subjectType: d[76],
+    subjectType: d[76]!,
     identifierHash: hex(d.subarray(77, 109)),
     trustService: key(109),
     certificate: key(141),
