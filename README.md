@@ -53,6 +53,60 @@ secp256r1 прямо в транзакции. Список доверенных 
 `anchor build` — обязательно перед `cargo test`: LiteSVM-тесты загружают собранные
 `target/deploy/*.so`.
 
+## Аттестатор НУЦ РК (`attestor/`)
+
+Локальный Go-сервис. Компания подписывает в NCALayer запрос на печать (CAdES, ключ ГОСТ 2015
+НУЦ РК); аттестатор проверяет подпись через KalkanCrypt — сертифицированное СКЗИ НУЦ — и, если
+подписал первый руководитель или сотрудник с правом подписи, подписывает Ed25519-ключом
+сообщение печати для `register_seal_attested`.
+
+- Подпись, цепочку до УЦ НУЦ и отзыв по CRL проверяет только KalkanCrypt (cgo). Поля
+  сертификата (O, `OU=BIN…`, роль в EKU, срок) читает `crypto/x509` — разбор без криптографии.
+- В сеть попадают название организации и `sha256(соль ‖ KZ ‖ БИН)`; соль и БИН аттестатор
+  отдаёт только запросившему и не хранит. ФИО и ИИН он не читает и не пишет в лог.
+- Ключ `fixtures/keys/attestor.json` и тестовый УЦ НУЦ — только для devnet: ключ лежит в
+  репозитории, и печать уровня «аттестатор» им может поставить кто угодно.
+
+Код возврата `VerifyData` в KalkanCrypt не отражает значение подписи ГОСТ, поэтому вердикт
+аттестатор берёт из собственного отчёта библиотеки о проверке (`outVerifyInfo`: по каждому
+подписанту ровно «Verify - OK», иначе отказ), а цепочку и отзыв дополнительно проверяет
+`X509ValidateCertificate(KC_USE_CRL)`. После любого обновления KalkanCrypt нужно заново
+запустить `go test -tags kalkan ./...`: изменившийся текст отчёта отклонит любую CMS.
+
+Нужно: Go 1.24, gcc, `sudo apt install libltdl7 libpcsclite1` и SDK НУЦ РК (KalkanCrypt,
+тестовые ключи и УЦ; выдаёт НУЦ РК, pki.gov.kz) в каталоге `pkisdk/` — в репозиторий он не
+входит по лицензии НУЦ. KalkanCrypt берёт доверенные корни только из системного хранилища
+(в WSL — `/etc/ssl/certs`): тестовые корни ставятся скриптом SDK
+`unzip pkisdk/C/Linux/ca-certs/ca-certs_new/test2022.zip && cd test2022 && sudo bash install_test.sh`.
+Файлы `--ca` всё равно нужны: они фиксируют издателя (AuthorityKeyId и DN).
+
+    cd attestor
+    go test ./...                 # без SDK: запрос, политика, сообщение печати
+    go test -tags kalkan ./...    # с SDK: тестовые ключи НУЦ через KalkanCrypt
+    go build -tags kalkan -o bin/attestor ./cmd/attestor
+    cd .. && attestor/bin/attestor serve        # http://127.0.0.1:8787
+
+`POST /v1/attest`, тело `{"cms": "<base64>"}` — присоединённая CMS над текстом (UTF-8, LF, без
+перевода строки в конце):
+
+    MOR-SEAL-REQUEST-V1
+    program: <program ID реестра>
+    address: <адрес>
+    kind: wallet | program | mint
+    controller: <контролёр адреса>
+    expires: <unix>
+    deadline: <unix, не позже чем через 15 минут>
+
+Ответ — сообщение печати и подпись аттестатора, название, БИН и соль. Ошибки —
+`{"error": "<код>"}`: `bad_signature`, `revoked`, `role_not_allowed`, `deadline_out_of_window`
+и другие (полный список — в `docs/superpowers/specs/2026-10-02-mor-attestor-design.md`).
+`GET /v1/info` — ключ аттестатора и его TrustService.
+
+Флаги `serve`: `--listen`, `--key`, `--ca` и `--crl` (повторяемые; по умолчанию тестовые УЦ и
+CRL НУЦ из `pkisdk/`), `--program`, `--cors-origin`, `--kalkan-lib` (или `KALKAN_LIB`; по
+умолчанию сертифицированная KalkanCrypt 2.0.2 из SDK). Без NCALayer запрос подписывает
+dev-команда: `attestor/bin/attestor sign-request --p12 <ключ.p12> --password <пароль> --request <файл>`.
+
 ## Devnet
 
     cd scripts/devnet-v1 && npm install

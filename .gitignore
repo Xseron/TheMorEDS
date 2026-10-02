@@ -1,8 +1,9 @@
-# SDK НУЦ РК — под их лицензией, в публичный репозиторий не кладём
+# SDK НУЦ РК под их лицензией, в публичный репозиторий не кладём
 pkisdk/
 
 target/
 node_modules/
+attestor/bin/
 .anchor/
 test-ledger/
 *.log
