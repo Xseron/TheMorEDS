@@ -78,6 +78,7 @@ import {
 } from '~/utils/registry'
 
 useSeoMeta({ title: 'Sealed transfer demo on Solana devnet', description: 'Send a Token-2022 demo token whose transfer hook checks the recipient\'s MOR seal on every transfer.' })
+defineOgImageComponent('Default', { title: 'Sealed transfer demo on Solana devnet', description: 'Send a Token-2022 demo token whose transfer hook checks the recipient\'s MOR seal on every transfer.' })
 
 const solana = useSolana()
 const { rpc, ids, txLink, attestorUrl } = solana

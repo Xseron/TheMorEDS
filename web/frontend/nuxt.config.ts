@@ -17,6 +17,7 @@ export default defineNuxtConfig({
     defaultLocale: 'en',
   },
   robots: { disallow: ['/address'] },
+  ogImage: { defaults: { width: 1200, height: 630 }, fonts: ['Manrope:500', 'Manrope:700', 'Manrope:800'] },
 
   runtimeConfig: {
     public: {

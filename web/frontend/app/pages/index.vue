@@ -209,11 +209,34 @@
 import { defineComponent, h, type PropType } from 'vue'
 import { DEMO } from '~/utils/registry'
 
+// Те же вопросы уходят в schema.org FAQPage
+const faq = [
+  { q: 'Does any personal data go on-chain?', a: 'No. A seal holds company data only: the company name and sha256(salt, jurisdiction, BIN or registry number). The salt stays with the owner, and the registry does not record the person who signed for the company.' },
+  { q: 'Who can seal a wallet?', a: 'A company that holds an electronic signature. In Kazakhstan, its head or an employee with signing rights signs with an NCA key; in the EU, the company signs with a compatible organization certificate. The wallet controller then registers the seal.' },
+  { q: 'What happens to a transfer to an unsealed wallet?', a: 'The Token-2022 transfer hook rejects it. The same happens when the recipient\'s seal has expired or its trust level is below what the token requires. On this site the transfer fails simulation, so your wallet never asks you to sign.' },
+  { q: 'Which signatures are supported?', a: 'Kazakhstan: signatures made with NCA keys through NCALayer, checked off-chain by an attestor. EU: P-256 eIDAS certificates, with the certificate and signature verified by the program on-chain. The seal records the path as its trust level: Attested or On-chain.' },
+  { q: 'Is MOR live on mainnet?', a: 'Not yet. The registry and the demo token run on Solana devnet, and the certificate authority and attestor use public test keys, so anyone can mint such seals. Mainnet readiness is planned for months 5 to 6 of the roadmap.' },
+]
+
 // Шаблон сайта дописывает « | MOR», поэтому заголовок без названия в начале (copy.md, Meta)
 useSeoMeta({
   title: 'On-chain KYC for companies on Solana',
   description: 'MOR links a company to a Solana wallet with its electronic signature. Check who stands behind an address, seal your wallet, try the sealed transfer.',
+  ogTitle: 'MOR: on-chain KYC with electronic signatures',
+  ogDescription: 'MOR links a company to a Solana wallet so applications can verify its identity. Live demo on Solana devnet.',
+  twitterCard: 'summary_large_image',
 })
+defineOgImageComponent('Default', {
+  title: 'On-chain KYC with electronic signatures',
+  description: 'MOR links a company to a Solana wallet so applications can verify its identity.',
+})
+useSchemaOrg([
+  defineOrganization({ name: 'MOR', logo: '/img/mark.png', sameAs: ['https://t.me/dtorossyan', 'https://t.me/ablStartup'] }),
+  defineWebSite({ name: 'MOR' }),
+  defineSoftwareApp({ name: 'MOR', applicationCategory: 'FinanceApplication', operatingSystem: 'Web', offers: { price: 0, priceCurrency: 'USD' } }),
+  defineWebPage({ '@type': 'FAQPage' }),
+  ...faq.map(f => defineQuestion({ name: f.q, acceptedAnswer: f.a })),
+])
 
 const query = ref('')
 function check() {
@@ -364,14 +387,5 @@ const roadmap = [
 const team = [
   { name: 'David Torossyan', role: 'Technical co-founder', text: 'Cryptography and infrastructure. Security engineer at Gamma Technologies: PKCS#11, HSMs and key management.', telegram: 'dtorossyan' },
   { name: 'Abylaikhan Karsybayev', role: 'Product co-founder', text: 'Design and customer development. Startup and Web3 product focus.', telegram: 'ablStartup' },
-]
-
-// Те же вопросы уходят в schema.org FAQPage (задача 14)
-const faq = [
-  { q: 'Does any personal data go on-chain?', a: 'No. A seal holds company data only: the company name and sha256(salt, jurisdiction, BIN or registry number). The salt stays with the owner, and the registry does not record the person who signed for the company.' },
-  { q: 'Who can seal a wallet?', a: 'A company that holds an electronic signature. In Kazakhstan, its head or an employee with signing rights signs with an NCA key; in the EU, the company signs with a compatible organization certificate. The wallet controller then registers the seal.' },
-  { q: 'What happens to a transfer to an unsealed wallet?', a: 'The Token-2022 transfer hook rejects it. The same happens when the recipient\'s seal has expired or its trust level is below what the token requires. On this site the transfer fails simulation, so your wallet never asks you to sign.' },
-  { q: 'Which signatures are supported?', a: 'Kazakhstan: signatures made with NCA keys through NCALayer, checked off-chain by an attestor. EU: P-256 eIDAS certificates, with the certificate and signature verified by the program on-chain. The seal records the path as its trust level: Attested or On-chain.' },
-  { q: 'Is MOR live on mainnet?', a: 'Not yet. The registry and the demo token run on Solana devnet, and the certificate authority and attestor use public test keys, so anyone can mint such seals. Mainnet readiness is planned for months 5 to 6 of the roadmap.' },
 ]
 </script>
