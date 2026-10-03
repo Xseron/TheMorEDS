@@ -1,13 +1,19 @@
 <template>
-  <div class="mx-auto max-w-[760px]">
-    <h1 class="mb-6 text-[28px]">Who stands behind this address?</h1>
-    <p v-if="error" class="mb-4 border border-refusal p-3 text-refusal">{{ error }}</p>
-    <Extract :address="text" :lookup="result" />
-    <p v-if="own" class="mt-4 flex items-center gap-3">
-      <RevokeButton :address="text" :seal-pda="sealed!.sealPda" @revoked="load" />
-      <span class="note">This is your wallet. Revoking closes the seal account and refunds its rent.</span>
-    </p>
-    <p class="note mt-4"><NuxtLink to="/">Check another address</NuxtLink></p>
+  <div class="grid grid-cols-1 gap-x-12 gap-y-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:grid-rows-[auto_1fr]">
+    <!-- На широком экране заголовок слева, выписка справа на сиреневой плашке; на телефоне всё столбиком -->
+    <header class="lg:col-start-1 lg:row-start-1">
+      <p class="eyebrow">Registry extract</p>
+      <h1 class="mt-3">Who stands behind this address?</h1>
+    </header>
+    <div class="band -mx-5 rounded-none p-5 sm:mx-0 sm:rounded-card md:p-10 lg:col-start-2 lg:self-start lg:row-span-2 lg:row-start-1">
+      <p v-if="error" class="mb-5 rounded-control bg-coral/15 p-4 text-refusal">{{ error }}</p>
+      <Extract :address="text" :lookup="result" />
+      <div v-if="own" class="mt-6 flex flex-wrap items-center gap-4">
+        <RevokeButton :address="text" :seal-pda="sealed!.sealPda" @revoked="load" />
+        <span class="note">This is your wallet. Revoking closes the seal account and refunds its rent.</span>
+      </div>
+    </div>
+    <p class="text-[15px] font-bold lg:col-start-1 lg:row-start-2"><NuxtLink to="/">Check another address</NuxtLink></p>
   </div>
 </template>
 

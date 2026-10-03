@@ -1,8 +1,8 @@
 <template>
-  <span class="inline-flex items-center gap-1 font-mono">
+  <span class="inline-flex items-center gap-1 font-mono" :class="{ 'whitespace-nowrap': !full }">
     <a :href="explorer(address)" target="_blank" rel="noopener" :title="address">{{ full ? address : shortAddress(address) }}</a>
-    <button type="button" class="text-muted hover:text-ink" :aria-label="copied ? 'Copied' : 'Copy address'" @click="copy">
-      <Icon :name="copied ? 'ph:check' : 'ph:copy'" size="15" />
+    <button type="button" class="-mr-1 rounded-md p-1 text-muted hover:bg-lilac-soft hover:text-ink" :aria-label="copied ? 'Copied' : 'Copy address'" @click="copy">
+      <Icon :name="copied ? 'ph:check' : 'ph:copy'" size="16" class="block" />
     </button>
   </span>
 </template>

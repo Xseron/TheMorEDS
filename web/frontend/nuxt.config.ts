@@ -34,8 +34,8 @@ export default defineNuxtConfig({
 
   fonts: {
     families: [
-      { name: 'STIX Two Text', provider: 'google', weights: [400, 600], styles: ['normal', 'italic'] },
-      { name: 'Courier Prime', provider: 'google', weights: [400, 700] },
+      { name: 'Manrope', provider: 'google', weights: [500, 700, 800] },
+      { name: 'Geist Mono', provider: 'google', weights: [400, 500] },
     ],
   },
   icon: { serverBundle: { collections: ['ph'] } },

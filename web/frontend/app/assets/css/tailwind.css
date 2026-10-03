@@ -4,9 +4,12 @@
 
 @layer base {
   html { color-scheme: light; }
-  body { @apply bg-paper font-serif text-[17px] leading-[1.55] text-ink; }
-  h1, h2, h3 { @apply font-serif font-semibold leading-tight; }
-  a { @apply text-seal underline-offset-2 hover:underline; }
+  body { @apply bg-paper font-sans text-[17px] font-medium leading-[1.6] text-ink; }
+  h1 { @apply text-[34px] font-extrabold leading-[1.1] tracking-[-0.01em] md:text-[48px]; }
+  h2 { @apply text-[26px] font-extrabold leading-[1.15] md:text-[32px]; }
+  /* .h3: заголовок карточки, который по структуре h2 */
+  h3, .h3 { @apply text-[20px] font-bold leading-snug; }
+  a { @apply text-violet underline-offset-2 hover:underline; }
   :focus-visible { outline: 2px solid #6D28D9; outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -14,9 +17,15 @@
 }
 
 @layer components {
-  .container-page { @apply mx-auto max-w-page px-4; }
-  .btn { @apply inline-block border border-ink bg-paper px-4 py-2 text-[15px] leading-tight text-ink no-underline active:translate-y-px disabled:cursor-wait disabled:opacity-60 hover:no-underline; }
-  .btn-primary { @apply border-seal bg-seal text-paper; }
-  .field { @apply w-full border border-ink bg-paper px-3 py-2 font-mono text-[15px] text-ink placeholder:text-muted; }
+  .container-page { @apply mx-auto max-w-page px-5; }
+  .btn { @apply inline-flex items-center justify-center rounded-control border-[1.5px] border-violet bg-paper px-5 py-3 text-[15px] font-bold leading-none text-violet no-underline transition-colors hover:bg-lilac-soft hover:no-underline disabled:cursor-wait disabled:opacity-60; }
+  .btn-primary { @apply border-violet bg-violet text-paper hover:border-violet-deep hover:bg-violet-deep; }
+  .field { @apply w-full rounded-control border border-line bg-paper px-4 py-3 text-[16px] font-medium text-ink placeholder:text-muted focus:border-violet focus:outline-none focus:ring-1 focus:ring-violet; }
+  .label { @apply text-[13px] font-bold uppercase tracking-[0.08em] text-muted; }
+  .eyebrow { @apply text-[13px] font-bold uppercase tracking-[0.12em] text-violet; }
+  .card { @apply rounded-card bg-lilac p-6 md:p-8; }
+  .card-white { @apply rounded-card bg-paper p-6 md:p-8; }
+  .band { @apply rounded-card bg-lilac; }
   .note { @apply text-[15px] text-muted; }
+  .code { @apply overflow-x-auto rounded-control bg-lilac-soft p-4 font-mono text-[13px] leading-relaxed; }
 }

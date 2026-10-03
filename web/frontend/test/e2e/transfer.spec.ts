@@ -9,7 +9,7 @@ test('the hook rejects a transfer to C before the wallet signs', async ({ page }
   await expect(page.getByText(`Sender:`)).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText('balance:')).toContainText(/\d/, { timeout: 60_000 })
   await page.getByRole('button', { name: 'Send 1 token to C (no seal)' }).click()
-  await expect(page.getByRole('img', { name: 'Stamp: REJECTED' })).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByTestId('seal-status')).toHaveText('Rejected', { timeout: 60_000 })
   await expect(page.getByText('recipient has no seal (9100)')).toBeVisible()
 })
 
