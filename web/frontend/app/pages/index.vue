@@ -39,7 +39,7 @@
           <div class="mt-6 max-w-[66ch] space-y-4">
             <p>A Solana wallet shows its full transaction history but not the legal counterparty behind it. Company identity and wallet control require additional evidence</p>
             <p>So each platform runs its own onboarding and verification for business counterparties, and the result stays inside that platform</p>
-            <p>Rules for banks, payment providers and digital-asset service providers already ask who receives a transfer<sup class="whitespace-nowrap"><a href="#src-1">[1]</a><a href="#src-2">[2]</a><a href="#src-3">[3]</a><a href="#src-4">[4]</a></sup> In Kazakhstan, licensed digital-asset providers must also check their customers.<sup class="whitespace-nowrap"><a href="#src-5">[5]</a><a href="#src-6">[6]</a></sup></p>
+            <p>Rules for banks, payment providers and digital-asset service providers already ask who receives a transfer.<sup class="whitespace-nowrap"><a href="#src-1">[1]</a><a href="#src-2">[2]</a><a href="#src-3">[3]</a><a href="#src-4">[4]</a></sup> In Kazakhstan, licensed digital-asset providers must also check their customers<sup class="whitespace-nowrap"><a href="#src-5">[5]</a><a href="#src-6">[6]</a></sup></p>
           </div>
         </div>
         <Illustration src="/img/gap.svg" alt="" ratio="19/14" />
