@@ -1,5 +1,5 @@
 <template>
-  <p v-if="failed" class="note">Could not reach Solana devnet. Reload the page to try again</p>
+  <p v-if="failed" class="note" role="alert">Could not reach Solana devnet. Reload the page to try again</p>
   <Extract v-else :address="address" :lookup="lookup" />
 </template>
 
