@@ -332,9 +332,9 @@ const Notes = defineComponent({
 })
 
 const scenario = [
-  'The state issues a token that moves only to sealed wallets.',
-  'A verified company pays for a property. MOR checks the buyer and seller wallets.',
-  'The receipt feeds an authorized reporting integration.',
+  'The state issues a token that moves only to sealed wallets',
+  'A verified company pays for a property. MOR checks the buyer and seller wallets',
+  'The receipt feeds an authorized reporting integration',
 ]
 
 const steps: { icon: string; title: string; text: string; artifact: string; seal?: string }[] = [
