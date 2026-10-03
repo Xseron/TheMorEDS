@@ -13,6 +13,8 @@ const LILAC = '#ede7f7'
 const VIOLET_HUE = 263
 // верхняя граница светлого серого: #f8f8f7 (светлота 0.9706) — тот же серый, что был фоном government.svg
 const GREY_MAX_L = 0.975
+// в government.svg светлые серые это поверхности (стена, лист, фронтон), а не пятно: там они белые
+const GREY_TARGET = { 'government.svg': '#ffffff' }
 const EDGE = 0.01 // допуск касания края холста, доля от размера
 
 const kb = n => (n / 1024).toFixed(1).padStart(6) + ' KB'
@@ -66,13 +68,13 @@ function classify(hex) {
 
 const COLOR_ATTR = /((?:fill|stroke|stop-color|flood-color|lighting-color)\s*[=:]\s*["']?\s*)(#[0-9a-f]{3}(?:[0-9a-f]{3})?)(?![0-9a-f])/gi
 
-function recolor(svg) {
+function recolor(svg, greyTarget = LILAC) {
   const stats = { blue: 0, grey: 0 }
   const out = svg.replace(COLOR_ATTR, (whole, prefix, hex) => {
     const kind = classify(hex)
     if (!kind) return whole
     stats[kind]++
-    if (kind === 'grey') return prefix + LILAC
+    if (kind === 'grey') return prefix + greyTarget
     const { s, l } = toHsl(parseColor(hex))
     return prefix + fromHsl(VIOLET_HUE, s, l)
   })
@@ -217,7 +219,7 @@ for (const file of files) {
     const clean = raw.replace(/<\?xml[^>]*\?>/, '').replace(/<metadata\b[\s\S]*?<\/metadata>/, '')
     const bg = removeBackground(clean)
     if (bg.warning) console.warn(`! ${file}: ${bg.warning}`)
-    const { svg, stats } = recolor(bg.svg)
+    const { svg, stats } = recolor(bg.svg, GREY_TARGET[file])
     const out = compress(svg)
     writeFileSync(join(outDir, file), out)
     const before = Buffer.byteLength(raw)
