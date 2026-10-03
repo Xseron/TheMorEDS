@@ -10,7 +10,7 @@
           <WalletButton v-if="!wallet" />
           <template v-else>
             <p>Connected: <AddressText :address="wallet.address" /> ({{ wallet.name }})</p>
-            <p v-if="existing === undefined" class="note">Checking the registry…</p>
+            <p v-if="existing === undefined && !error" class="note">Checking the registry…</p>
             <div v-else-if="existing" class="mt-2 flex flex-wrap items-center gap-3 border border-seal p-3">
               <span>This wallet is already sealed as <b>{{ existing.seal.name }}</b>. <NuxtLink :to="`/address/${wallet.address}`">Open the extract</NuxtLink>.</span>
               <RevokeButton :address="wallet.address" :seal-pda="existing.sealPda" @revoked="onRevoked" />
@@ -52,6 +52,7 @@
         </li>
       </ol>
       <p v-if="error" class="mt-4 border border-refusal p-3 text-refusal">{{ error }}</p>
+      <button v-if="error && existing === undefined" class="btn mt-2" @click="check">Retry</button>
     </ClientOnly>
   </div>
 </template>
@@ -87,10 +88,17 @@ async function check() {
   done.value = null
   error.value = ''
   if (!wallet.value) return
-  const r = await lookup(wallet.value.address, true)
-  existing.value = r.status === 'valid' || r.status === 'expired' ? r : null
+  const addr = wallet.value.address
+  try {
+    const r = await lookup(addr, true)
+    // Ответ по уже сменённому кошельку не показываем
+    if (wallet.value?.address === addr) existing.value = r.status === 'valid' || r.status === 'expired' ? r : null
+  } catch (e) {
+    if (wallet.value?.address === addr) error.value = describeError(e, { attestorUrl })
+  }
 }
-watch(() => wallet.value?.address, check, { immediate: true })
+// Баннер отзыва принадлежит кошельку, а не проверке: после отзыва check() вызывается снова, и баннер должен остаться
+watch(() => wallet.value?.address, () => { revoked.value = ''; check() }, { immediate: true })
 
 function onRevoked(sig: string) {
   revoked.value = sig
