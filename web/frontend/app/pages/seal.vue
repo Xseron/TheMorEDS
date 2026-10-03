@@ -95,8 +95,9 @@ import { signWithNcaLayer } from '~/utils/ncalayer'
 import { hex, sealPda } from '~/utils/registry'
 import type { Lookup } from '~/composables/useRegistry'
 
-useSeoMeta({ title: 'Seal your wallet with an electronic signature', description: 'Register a MOR seal for your Solana wallet through the NCA of Kazakhstan or the test attestor.' })
-defineOgImageComponent('Default', { title: 'Seal your wallet with an electronic signature', description: 'Register a MOR seal for your Solana wallet through the NCA of Kazakhstan or the test attestor.' })
+const description = 'Register an organization seal for your Solana wallet: sign with an NCA of Kazakhstan key through NCALayer, or try the test attestor on devnet.'
+useSeoMeta({ title: 'Seal your wallet with an electronic signature', description })
+defineOgImageComponent('Default', { title: 'Seal your wallet with an electronic signature', description })
 
 const { ids, send, accountData, txLink, attestorUrl, attestorAddress, testAttestorKey } = useSolana()
 const { wallet } = useWallet()

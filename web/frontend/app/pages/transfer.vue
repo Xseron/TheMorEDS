@@ -77,8 +77,9 @@ import {
   DEMO, ataOf, createAtaIdempotentInstruction, decodeSeal, extraMetasPda, parseAddress, policyPda, sealPda, transferCheckedInstruction,
 } from '~/utils/registry'
 
-useSeoMeta({ title: 'Sealed transfer demo on Solana devnet', description: 'Send a Token-2022 demo token whose transfer hook checks the recipient\'s MOR seal on every transfer.' })
-defineOgImageComponent('Default', { title: 'Sealed transfer demo on Solana devnet', description: 'Send a Token-2022 demo token whose transfer hook checks the recipient\'s MOR seal on every transfer.' })
+const description = "Send a Token-2022 demo token whose transfer hook checks the recipient's organization seal and rejects transfers to unsealed wallets."
+useSeoMeta({ title: 'Sealed transfer demo on Solana devnet', description })
+defineOgImageComponent('Default', { title: 'Sealed transfer demo on Solana devnet', description })
 
 const solana = useSolana()
 const { rpc, ids, txLink, attestorUrl } = solana
