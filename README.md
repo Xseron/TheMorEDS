@@ -113,6 +113,24 @@ CRL НУЦ из `pkisdk/`), `--program`, `--cors-origin`, `--kalkan-lib` (или
 умолчанию сертифицированная KalkanCrypt 2.0.2 из SDK). Без NCALayer запрос подписывает
 dev-команда: `attestor/bin/attestor sign-request --p12 <ключ.p12> --password <пароль> --request <файл>`.
 
+## Сайт (`web/frontend/`)
+
+Nuxt 4, pnpm. Лендинг и демо: выписка «кто стоит за адресом», печать кошелька, перевод демо-токена.
+
+    cd web/frontend
+    pnpm install
+    pnpm dev                                  # http://localhost:3000
+
+Печать через НУЦ РК требует NCALayer на машине пользователя и аттестатора рядом:
+
+    attestor/bin/attestor serve --cors-origin http://localhost:3000
+
+Без них работает «Test attestor (demo)»: страница подписывает сообщение тестовым ключом из `fixtures/keys/attestor.json`.
+
+Настройки через переменные `NUXT_PUBLIC_RPC_URL`, `NUXT_PUBLIC_ATTESTOR_URL`, `NUXT_PUBLIC_SITE_URL` (адрес сайта для карточки ссылки и sitemap). Статическая сборка: `pnpm generate` → `.output/public`; страницы `/address/*` строятся в браузере, поэтому хостингу нужен fallback на `200.html`.
+
+Тесты: `pnpm test` (Vitest), `pnpm test:e2e` (Playwright против devnet; e2e-кошелёк из `test/e2e/fixtures/wallet.json` нужно один раз пополнить, адрес печатает `node test/e2e/fixtures/address.mjs`), `pnpm check:build` после `pnpm generate`.
+
 ## Devnet
 
     cd scripts/devnet-v1 && npm install
