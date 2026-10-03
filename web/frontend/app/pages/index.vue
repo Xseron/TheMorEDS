@@ -56,22 +56,22 @@
         <article class="card-white">
           <Illustration src="/img/platforms.svg" alt="" ratio="4/3" class="w-52" />
           <h3 class="mt-6">Payment and asset platforms</h3>
-          <p class="mt-2">Platforms that must verify business counterparties check the organization seal instead of running a separate onboarding for each company.</p>
+          <p class="mt-2">Platforms that must verify business counterparties check the organization seal instead of running a separate onboarding for each company</p>
         </article>
         <article class="card-white">
           <Illustration src="/img/government.svg" alt="" ratio="4/3" class="w-52" />
           <h3 class="mt-6">Government reporting teams</h3>
-          <p class="mt-2">Transfers between sealed wallets show the company on each side. We see the first pilot opportunity in the Alatau City ecosystem.</p>
+          <p class="mt-2">Transfers between sealed wallets show the company on each side. We see the first pilot opportunity in the Alatau City ecosystem</p>
         </article>
       </div>
       <dl class="card-white mt-5 grid grid-cols-1 gap-x-12 gap-y-6 md:grid-cols-2">
         <div>
           <dt class="label">Today</dt>
-          <dd class="mt-2">Declarations go through accounting and periodic reports.</dd>
+          <dd class="mt-2">Declarations go through accounting and periodic reports</dd>
         </div>
         <div>
           <dt class="label">With MOR</dt>
-          <dd class="mt-2">Reporting reads transfers of a state-issued token between sealed wallets as they happen, with the company on each side.</dd>
+          <dd class="mt-2">Reporting reads transfers of a state-issued token between sealed wallets as they happen, with the company on each side</dd>
         </div>
       </dl>
       <p class="note mt-8">First users: corporate wallets with electronic signatures. Kazakhstan comes first, then compatible EU organization certificates.</p>
