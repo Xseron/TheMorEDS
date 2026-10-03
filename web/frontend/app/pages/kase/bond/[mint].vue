@@ -19,6 +19,7 @@
         <template v-else>
           <BondTerms :view="view" :mint="mint" :issuer-name="names[view.bond.issuer]" :issuer-no-seal="noSeal.has(view.bond.issuer)" />
           <EventTimeline :view="view" :now="now" />
+          <BondActions :view="view" :mint="mint" :now="now" :names="names" @changed="load" />
 
           <section class="card-white">
             <h2 class="h3">Register of holders now</h2>
@@ -57,7 +58,7 @@ useSeoMeta({ title: 'Bond dossier', robots: 'noindex' })
 const route = useRoute()
 const referenceMint = useRuntimeConfig().public.kaseReferenceMint
 const mint = computed<Address | null>(() => parseAddress(String(route.params.mint)))
-const { view, missing } = useBond(mint)
+const { view, missing, load } = useBond(mint)
 const { lookup } = useRegistry()
 const names = ref<Record<string, string>>({})
 // Подтверждённо без печати: сбой запроса сюда не попадает и повторяется на следующем опросе

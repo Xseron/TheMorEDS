@@ -16,7 +16,7 @@ export const eventPda = (program: Address, mint: Address, k: number) => pda(prog
 export const holderPda = (program: Address, mint: Address, tokenAccount: Address) => pda(program, ['holder', b(mint), b(tokenAccount)])
 export const snapPda = (program: Address, mint: Address, k: number, tokenAccount: Address) =>
   pda(program, ['snap', b(mint), Uint8Array.of(k), b(tokenAccount)])
-export const extraMetasPda = (program: Address, mint: Address) => pda(program, ['extra-account-metas', b(mint)])
+export const bondExtraMetasPda = (program: Address, mint: Address) => pda(program, ['extra-account-metas', b(mint)])
 export const ata2022 = (owner: Address, mint: Address) => pda(ATA_PROGRAM, [b(owner), b(TOKEN_2022), b(mint)])
 
 type Schedule = Pick<Terms, 'startTs' | 'periodSecs' | 'recordOffsetSecs' | 'noticeSecs' | 'nEvents'>
@@ -94,7 +94,7 @@ export async function transferBondInstruction(
     pda(registry, ['seal', b(a.destinationOwner)]),
     holderPda(program, mint, a.source),
     holderPda(program, mint, a.destination),
-    extraMetasPda(program, mint),
+    bondExtraMetasPda(program, mint),
   ])
   return {
     programAddress: TOKEN_2022,
