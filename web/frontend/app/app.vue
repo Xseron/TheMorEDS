@@ -21,7 +21,7 @@
     </main>
     <footer class="border-t border-line">
       <div class="container-page note space-y-1 py-8">
-        <p class="max-w-[72ch]">Devnet demo. The certificate authority and attestor here use public test keys, so anyone can mint such seals. This shows the mechanism, not trust.</p>
+        <p class="max-w-[72ch]">Devnet demo. The certificate authority and attestor here use public test keys, so anyone can mint such seals. This shows the mechanism, not trust</p>
         <p>RPC: <span class="font-mono text-[14px]">{{ rpcUrl }}</span></p>
         <p>Contact: Telegram <a href="https://t.me/dtorossyan" target="_blank" rel="noopener">@dtorossyan</a>, <a href="https://t.me/ablStartup" target="_blank" rel="noopener">@ablStartup</a></p>
       </div>

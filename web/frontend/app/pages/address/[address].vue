@@ -10,7 +10,7 @@
       <Extract :address="text" :lookup="result" />
       <div v-if="own" class="mt-6 flex flex-wrap items-center gap-4">
         <RevokeButton :address="text" :seal-pda="sealed!.sealPda" @revoked="load" />
-        <span class="note">This is your wallet. Revoking closes the seal account and refunds its rent.</span>
+        <span class="note">This is your wallet. Revoking closes the seal account and refunds its rent</span>
       </div>
     </div>
     <p class="text-[15px] font-bold lg:col-start-1 lg:row-start-2"><NuxtLink to="/">Check another address</NuxtLink></p>

@@ -35,8 +35,8 @@
         </div>
       </div>
     </template>
-    <p v-else-if="lookup?.status === 'none'" class="mt-5">No seal. The registry does not know who stands behind this address.</p>
-    <p v-else-if="lookup?.status === 'invalid'" class="mt-5">This is not a Solana address.</p>
+    <p v-else-if="lookup?.status === 'none'" class="mt-5">No seal. The registry does not know who stands behind this address</p>
+    <p v-else-if="lookup?.status === 'invalid'" class="mt-5">This is not a Solana address</p>
     <div v-else class="mt-5 space-y-3">
       <span class="block h-8 w-2/3 animate-pulse rounded bg-lilac-soft" />
       <span class="block h-4 w-1/2 animate-pulse rounded bg-lilac-soft" />

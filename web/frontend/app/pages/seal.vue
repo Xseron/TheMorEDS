@@ -2,7 +2,7 @@
   <div class="grid grid-cols-1 gap-x-12 gap-y-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
     <header>
       <h1>Seal your wallet</h1>
-      <p class="mt-5 text-muted">A seal ties your wallet to your company. The company name and a salted hash of its BIN go on-chain. The BIN itself does not.</p>
+      <p class="mt-5 text-muted">A seal ties your wallet to your company. The company name and a salted hash of its BIN go on-chain. The BIN itself does not</p>
     </header>
 
     <div class="band -mx-5 rounded-none p-5 sm:mx-0 sm:rounded-card md:p-10 lg:self-start">
@@ -15,7 +15,7 @@
               <p class="mt-3">Connected: <AddressText :address="wallet.address" /> ({{ wallet.name }})</p>
               <p v-if="existing === undefined && !error" class="note mt-2">Checking the registry…</p>
               <div v-else-if="existing" class="mt-5 rounded-control bg-lilac-soft p-4">
-                <p>This wallet is already sealed as <b>{{ existing.seal.name }}</b>. <NuxtLink :to="`/address/${wallet.address}`">Open the extract</NuxtLink>.</p>
+                <p>This wallet is already sealed as <b>{{ existing.seal.name }}</b>. <NuxtLink :to="`/address/${wallet.address}`">Open the extract</NuxtLink></p>
                 <RevokeButton class="mt-3" :address="wallet.address" :seal-pda="existing.sealPda" @revoked="onRevoked" />
               </div>
               <p v-if="revoked" class="mt-5 rounded-control bg-lilac-soft p-4 [overflow-wrap:anywhere]">Seal revoked. Transaction: <a :href="txLink(revoked)" target="_blank" rel="noopener" class="font-mono text-[13px]">{{ revoked }}</a></p>
@@ -32,9 +32,9 @@
 
             <fieldset v-if="mode === 'nca'" class="mt-7 min-w-0 space-y-4">
               <legend class="label">NCA of Kazakhstan</legend>
-              <p class="text-[15px]">This is the request you sign with your company's NCA key. The attestor reads the company name and BIN from your certificate.</p>
+              <p class="text-[15px]">This is the request you sign with your company's NCA key. The attestor reads the company name and BIN from your certificate</p>
               <pre class="code">{{ request.text }}</pre>
-              <p class="note">The request is valid for 10 minutes. Signing refreshes it.</p>
+              <p class="note">The request is valid for 10 minutes. Signing refreshes it</p>
               <div class="flex flex-wrap items-center gap-3">
                 <button class="btn btn-primary" :disabled="busy" @click="attestNca">Sign with NCALayer</button>
                 <span v-if="busy" class="note">{{ stage }}</span>
@@ -43,7 +43,7 @@
 
             <fieldset v-else class="mt-7 min-w-0 space-y-4">
               <legend class="label">Test attestor (demo)</legend>
-              <p class="rounded-control bg-coral/15 p-4 text-[15px] text-refusal">The attestor key is public. Anyone can mint such seals. Demo only.</p>
+              <p class="rounded-control bg-coral/15 p-4 text-[15px] text-refusal">The attestor key is public. Anyone can mint such seals. Demo only</p>
               <div class="grid gap-4 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
                 <label class="block text-[15px] font-bold">Company name<input v-model="name" class="field mt-2" maxlength="128"></label>
                 <label class="block text-[15px] font-bold">BIN<input v-model="bin" class="field mt-2" inputmode="numeric" maxlength="12"></label>
@@ -53,7 +53,7 @@
 
             <p v-if="attestation" class="mt-6 rounded-control bg-lilac-soft p-4">
               Attested by <AddressText :address="attestation.trustService" />: <b>{{ attestation.name }}</b><span v-if="attestation.bin">, BIN {{ attestation.bin }}</span>.
-              The BIN stays in this browser and does not go on-chain.
+              The BIN stays in this browser and does not go on-chain
             </p>
           </li>
 
@@ -67,12 +67,12 @@
 
           <li v-if="done" class="card-white">
             <h2 class="h3">Seal registered</h2>
-            <p class="mt-3"><b>{{ done.name }}</b>, KZ, attested, valid until {{ date(done.expiresAt) }}.</p>
+            <p class="mt-3"><b>{{ done.name }}</b>, KZ, attested, valid until {{ date(done.expiresAt) }}</p>
             <p class="mt-1 [overflow-wrap:anywhere]">Extract: <NuxtLink :to="`/address/${wallet!.address}`">open</NuxtLink>. Transaction: <a :href="txLink(done.sig)" target="_blank" rel="noopener" class="font-mono text-[13px]">{{ done.sig }}</a></p>
             <div class="mt-5 rounded-control bg-lilac-soft p-4">
               <p class="[overflow-wrap:anywhere]">Salt: <code class="font-mono text-[13px]">{{ done.salt }}</code></p>
               <button class="btn mt-3" @click="copySalt">{{ saltCopied ? 'Copied' : 'Copy salt' }}</button>
-              <p class="note mt-3">Keep it. You need it to disclose your BIN to a counterparty. It is not stored anywhere else.</p>
+              <p class="note mt-3">Keep it. You need it to disclose your BIN to a counterparty. It is not stored anywhere else</p>
             </div>
           </li>
         </ol>

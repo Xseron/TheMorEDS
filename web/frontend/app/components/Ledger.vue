@@ -2,7 +2,7 @@
 <template>
   <figure class="card">
     <div class="flex flex-wrap items-center justify-between gap-4">
-      <figcaption>Transfers of a state-issued token in Alatau City. <span class="note">Example data.</span></figcaption>
+      <figcaption>Transfers of a state-issued token in Alatau City. <span class="note">Example data</span></figcaption>
       <!-- Настоящие радиокнопки под прозрачным слоем, как на /seal -->
       <div role="radiogroup" aria-label="Ledger view" class="flex flex-wrap gap-2">
         <label class="btn relative" :class="{ 'btn-primary': !withSeals }"><input v-model="withSeals" type="radio" name="ledger-view" :value="false" class="toggle">Without seals</label>

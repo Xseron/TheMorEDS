@@ -21,5 +21,5 @@ test('C: no seal', async ({ page }) => {
 test('junk is not an address', async ({ page }) => {
   await page.goto('/address/hello%20world')
   await expect(page.getByTestId('seal-status')).toHaveText('Not an address')
-  await expect(page.getByText('This is not a Solana address.')).toBeVisible()
+  await expect(page.getByText('This is not a Solana address')).toBeVisible()
 })

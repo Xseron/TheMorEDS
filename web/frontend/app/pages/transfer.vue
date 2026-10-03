@@ -2,13 +2,13 @@
   <div class="grid grid-cols-1 gap-x-12 gap-y-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
     <header>
       <h1>Sealed transfer</h1>
-      <p class="mt-5 text-muted">A Token-2022 token with a transfer hook. A transfer goes through only when the recipient's wallet carries a seal of trust level "attested" or higher. The hook reads the registry on every transfer.</p>
+      <p class="mt-5 text-muted">A Token-2022 token with a transfer hook. A transfer goes through only when the recipient's wallet carries a seal of trust level "attested" or higher. The hook reads the registry on every transfer</p>
     </header>
 
     <div class="band -mx-5 space-y-4 rounded-none p-5 sm:mx-0 sm:rounded-card md:p-10 lg:self-start">
       <ClientOnly>
         <div v-if="!wallet" class="card-white">
-          <p>Connect a wallet to send the demo token.</p>
+          <p>Connect a wallet to send the demo token</p>
           <WalletButton class="mt-4" />
         </div>
         <template v-else>
@@ -16,11 +16,11 @@
             <p>Sender: <AddressText :address="wallet.address" />, balance: <b>{{ balance ?? '…' }}</b> tokens</p>
 
             <div v-if="empty" class="mt-5 rounded-card border border-coral/60 bg-coral/10 p-5 text-[15px]">
-              <p><b>This wallet is empty.</b> Fund it from WSL with devnet SOL and tokens from the issuer. SOL is also available at <a href="https://faucet.solana.com" target="_blank" rel="noopener">faucet.solana.com</a>; only the issuer can mint the token.</p>
+              <p><b>This wallet is empty.</b> Fund it from WSL with devnet SOL and tokens from the issuer. SOL is also available at <a href="https://faucet.solana.com" target="_blank" rel="noopener">faucet.solana.com</a>; only the issuer can mint the token</p>
               <pre class="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-[13px] leading-relaxed [overflow-wrap:anywhere]">solana transfer -u devnet {{ wallet.address }} 0.3 --allow-unfunded-recipient
 spl-token -u devnet create-account {{ ids.mint }} --owner {{ wallet.address }} -p TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb --fee-payer ~/.config/solana/id.json
 spl-token -u devnet mint {{ ids.mint }} 50 {{ ownAta }}</pre>
-              <p class="note mt-3">Judges: ask <a href="https://t.me/dtorossyan" target="_blank" rel="noopener">@dtorossyan</a> on Telegram for demo tokens.</p>
+              <p class="note mt-3">Judges: ask <a href="https://t.me/dtorossyan" target="_blank" rel="noopener">@dtorossyan</a> on Telegram for demo tokens</p>
             </div>
 
             <div class="mt-6 grid gap-2">
@@ -50,7 +50,7 @@ spl-token -u devnet mint {{ ids.mint }} 50 {{ ownAta }}</pre>
 
       <section class="card-white">
         <h2 class="h3">Holders</h2>
-        <p class="note mt-2">The public devnet RPC does not allow listing holders, so this is the fixed list of demo wallets plus the connected one and the address in the field above.</p>
+        <p class="note mt-2">The public devnet RPC does not allow listing holders, so this is the fixed list of demo wallets plus the connected one and the address in the field above</p>
         <button class="btn mt-4" :disabled="holdersBusy" @click="loadHolders">Show holders</button>
         <div v-if="holders.length" class="mt-6 overflow-x-auto">
           <table class="w-full text-[15px]">
@@ -119,7 +119,7 @@ async function send(to: string) {
       createAtaIdempotentInstruction(ids, from, destination, dest),
       transferCheckedInstruction(ids, { source, destination, authority: from, amount: 1n, policy, recipientSeal, extraMetas }),
     ])
-    result.value = { ok: true, text: 'The hook found the recipient\'s seal and let the transfer through.', sig }
+    result.value = { ok: true, text: 'The hook found the recipient\'s seal and let the transfer through', sig }
   } catch (e) {
     result.value = { ok: false, text: describeError(e, { attestorUrl }), rejected: isHookRejection(e) }
   } finally {
