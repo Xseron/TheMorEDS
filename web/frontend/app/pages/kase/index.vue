@@ -66,7 +66,7 @@
 <script setup lang="ts">
 import { createNoopSigner, generateKeyPair, getAddressFromPublicKey, type Instruction } from '@solana/kit'
 import { attestWithTestKey, registerInstructions } from '~/utils/attestation'
-import { ata2022, createAta2022Instruction, demoTerms } from '~/utils/bond'
+import { ata2022, createAta2022Instruction, demoTerms, setComputeUnitLimitInstruction } from '~/utils/bond'
 import { getCreateBondInstructionAsync, getIssueInstructionAsync, getRegisterHolderInstructionAsync } from '~/utils/bond/generated'
 import { describeError } from '~/utils/errors'
 import { sealPda } from '~/utils/registry'
@@ -151,7 +151,7 @@ const issue = () => run(async () => {
   rememberBond(mint)
   // Все три держателя одной транзакцией: выпуск открыт только до первой даты фиксации, а подтверждений кошелька должно быть два
   progress.value = 'Registering the investors and issuing the bonds'
-  const holderInstructions: Instruction[] = []
+  const holderInstructions: Instruction[] = [setComputeUnitLimitInstruction(400_000)]
   for (const [i, w] of wallets.value.entries()) {
     const tokenAccount = await ata2022(w.address, mint)
     holderInstructions.push(

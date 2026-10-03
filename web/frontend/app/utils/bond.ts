@@ -1,5 +1,5 @@
 // Облигация KASE: адреса, график, суммы и инструкции вокруг программы bond_lifecycle (клиент — Codama из mor-kase)
-import { AccountRole, getAddressEncoder, getProgramDerivedAddress, type Address, type Instruction } from '@solana/kit'
+import { AccountRole, address, getAddressEncoder, getProgramDerivedAddress, type Address, type Instruction } from '@solana/kit'
 import type { BondEvent, Terms, TermsArgs } from './bond/generated'
 import { ATA_PROGRAM, SYSTEM_PROGRAM, TOKEN_2022, concat, u32le, u64le } from './registry'
 
@@ -68,6 +68,11 @@ export function createAta2022Instruction(payer: Address, ata: Address, owner: Ad
     accounts: [{ address: payer, role: AccountRole.WRITABLE_SIGNER }, { address: ata, role: AccountRole.WRITABLE }, ro(owner), ro(mint), ro(SYSTEM_PROGRAM), ro(TOKEN_2022)],
     data: Uint8Array.of(1),
   }
+}
+
+/** ComputeBudget::SetComputeUnitLimit (2): три ATA, register и issue в одной транзакции не влезают в лимит по умолчанию */
+export function setComputeUnitLimitInstruction(units: number): Instruction {
+  return { programAddress: address('ComputeBudget111111111111111111111111111111'), data: concat(Uint8Array.of(2), u32le(units)) }
 }
 
 /** SystemInstruction::Transfer (2) */
