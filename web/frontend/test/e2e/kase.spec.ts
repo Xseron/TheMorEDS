@@ -12,6 +12,7 @@ test('opens the reference bond and switches to an unknown mint', async ({ page }
   await expect(badge(page, 'Redeemed')).toBeVisible({ timeout: 60_000 })
   await expect(page.getByText('Holders processed 3 of 3: complete').first()).toBeVisible()
   await expect(badge(page, 'Paid').first()).toBeVisible()
+  // Nuxt пересоздаёт страницу при смене параметра маршрута, поэтому ответ старого минта не доживает до новой; здесь проверяем вид неизвестного минта
   // Адрес без облигации этой программы
   await page.goto('/kase/bond/5kSUuRK5wM5LN4SsGekAzk9mGQ78zRnpsMsq3skWP3eu')
   await expect(badge(page, 'No such bond')).toBeVisible({ timeout: 60_000 })

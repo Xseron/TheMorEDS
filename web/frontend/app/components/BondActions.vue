@@ -5,10 +5,11 @@
       <button v-if="isIssuer && announceK" class="btn" :disabled="busy" @click="announce">Announce 30% redemption</button>
       <button v-if="pendingK" class="btn btn-primary" :disabled="busy || pendingRows.length === 0" @click="snapshots">Take snapshots for event {{ pendingK }}</button>
       <button v-if="isIssuer && fundK" class="btn" :disabled="busy" @click="faucet">Get tKZT</button>
-      <button v-if="isIssuer && fundK" class="btn" :disabled="busy" @click="fund">Fund event {{ fundK }}</button>
+      <button v-if="isIssuer && fundK" class="btn" :disabled="busy || !fundCovered" @click="fund">Fund event {{ fundK }}</button>
+      <span v-if="isIssuer && fundK && !fundCovered" class="note self-center">Get tKZT first</span>
       <button v-if="payK" class="btn btn-primary" :disabled="busy || unpaid.length === 0 || now < paymentTs(t, payK)" @click="payAll">Pay all for event {{ payK }}</button>
     </div>
-    <div v-if="investors.length === 3" class="mt-3 flex flex-wrap gap-2">
+    <div v-if="investors.length === 3 && view.bond.outstanding > 0n" class="mt-3 flex flex-wrap gap-2">
       <button class="btn" :disabled="busy" @click="transfer(1)">Send 1 bond: Investor 1 → Investor 2</button>
       <button class="btn" :disabled="busy" @click="transfer('c')">Send 1 bond to C (no seal)</button>
     </div>
@@ -35,8 +36,9 @@ import { describeError, isHookRejection } from '~/utils/errors'
 import { DEMO } from '~/utils/registry'
 import { submit, type Wallet } from '~/utils/submit'
 
-const props = defineProps<{ view: BondView; mint: Address; now: bigint; names: Record<string, string> }>()
-const emit = defineEmits<{ changed: []; busy: [boolean] }>()
+// reload: busy держится до конца перезагрузки, чтобы устаревшие кнопки не нажимались сразу после действия
+const props = defineProps<{ view: BondView; mint: Address; now: bigint; names: Record<string, string>; reload: () => Promise<void> }>()
+const emit = defineEmits<{ busy: [boolean] }>()
 
 const solana = useSolana()
 const { rpc, ids, bondProgram, tkztMint, txLink, attestorUrl } = solana
@@ -56,6 +58,8 @@ const pendingK = computed(() => { for (let k = 1; k <= kClock.value; k++) if (!e
 const pendingRows = computed(() => props.view.rows.filter(r => r.lastEvent === pendingK.value - 1))
 const announceK = computed(() => (event(2)?.redemptionBps || props.now >= noticeDeadline(t.value, 2) || t.value.nEvents <= 2 ? 0 : 2))
 const fundK = computed(() => props.view.events.find(e => e.complete && e.funded === 0n && e.couponTotal + e.principalTotal > 0n)?.k ?? 0)
+const fundDue = computed(() => { const e = event(fundK.value); return e ? e.couponTotal + e.principalTotal : 0n })
+const fundCovered = computed(() => props.view.issuerTkzt >= fundDue.value)
 const payK = computed(() => props.view.events.find(e => e.complete && e.funded === e.couponTotal + e.principalTotal && e.paid < e.funded)?.k ?? 0)
 const unpaid = computed(() => props.view.snapshots.filter(s => s.k === payK.value && !s.paid && s.balance > 0n))
 
@@ -78,9 +82,9 @@ async function run(title: string, fn: () => Promise<string>, okText: string) {
     const rejected = isHookRejection(e)
     result.value = { ok: false, title: rejected ? 'Transfer rejected' : 'Action failed', text: describeError(e, { attestorUrl }), rejected }
   } finally {
+    await props.reload().catch(() => {})
     busy.value = false
     emit('busy', false)
-    emit('changed')
   }
 }
 

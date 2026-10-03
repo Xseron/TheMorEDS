@@ -29,12 +29,12 @@
 
 <script setup lang="ts">
 import type { BondView } from '~/composables/useBond'
-import { formatTkzt, recordTs } from '~/utils/bond'
+import { formatClock, formatTkzt, recordTs } from '~/utils/bond'
 
 const props = defineProps<{ view: BondView; k: number; names: Record<string, string> }>()
 const event = computed(() => props.view.events.find(e => e.k === props.k))
 const rows = computed(() => props.view.snapshots.filter(s => s.k === props.k && s.balance > 0n))
-const date = computed(() => new Date(Number(recordTs(props.view.bond.terms, props.k)) * 1000).toLocaleTimeString('en-GB'))
+const date = computed(() => formatClock(recordTs(props.view.bond.terms, props.k)))
 const completeness = computed(() => {
   const e = event.value
   const required = props.view.bond.required[props.k - 1] ?? 0

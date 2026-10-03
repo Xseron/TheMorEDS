@@ -12,6 +12,10 @@
           <StatusBadge text="No such bond" tone="coral" />
           <p class="mt-4">This address is not a bond of this program. <NuxtLink to="/kase">Issue a test bond</NuxtLink> or <NuxtLink :to="`/kase/bond/${referenceMint}`">open the reference bond</NuxtLink></p>
         </div>
+        <div v-else-if="!view && error" class="card-white">
+          <p class="text-refusal" role="alert">Could not read the bond from Solana devnet</p>
+          <button class="btn mt-3" @click="reload">Try again</button>
+        </div>
         <div v-else-if="!view" class="card-white space-y-3">
           <span class="block h-8 w-2/3 animate-pulse rounded bg-lilac-soft" />
           <div class="grid gap-5 sm:grid-cols-2"><span v-for="i in 4" :key="i" class="block h-10 animate-pulse rounded bg-lilac-soft" /></div>
@@ -19,11 +23,11 @@
         <template v-else>
           <BondTerms :view="view" :mint="mint" :issuer-name="names[view.bond.issuer]" :issuer-no-seal="noSeal.has(view.bond.issuer)" />
           <EventTimeline :view="view" :now="now" />
-          <BondActions :view="view" :mint="mint" :now="now" :names="names" @busy="onBusy" @changed="reload" />
+          <BondActions :view="view" :mint="mint" :now="now" :names="names" :reload="reload" @busy="onBusy" />
 
           <section class="card-white">
             <h2 class="h3">Register of holders now</h2>
-            <p v-if="!view.rows.length" class="note mt-2">No holders yet. Issue bonds to a holder to start the register</p>
+            <p v-if="!view.rows.length" class="note mt-2">No holders yet. <NuxtLink to="/kase">Issue a test bond</NuxtLink> to start a register</p>
             <div v-else class="mt-6 overflow-x-auto">
               <table class="w-full text-[15px]">
                 <thead><tr class="label text-left"><th class="pb-2 pr-4">Holder</th><th class="pb-2 pr-4">Bonds</th><th class="pb-2">Last event passed</th></tr></thead>
@@ -58,7 +62,7 @@ useSeoMeta({ title: 'Bond dossier', robots: 'noindex' })
 const route = useRoute()
 const referenceMint = useRuntimeConfig().public.kaseReferenceMint
 const mint = computed<Address | null>(() => parseAddress(String(route.params.mint)))
-const { view, missing, load, pause, resume } = useBond(mint)
+const { view, missing, error, load, pause, resume } = useBond(mint)
 // Действие идёт: опрос стоит. После него один свежий прогон, сбой просто ждёт следующего опроса
 const onBusy = (b: boolean) => (b ? pause() : resume())
 const reload = () => load().catch(() => {})

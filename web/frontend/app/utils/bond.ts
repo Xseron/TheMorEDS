@@ -37,6 +37,13 @@ export const coupon = (t: Pick<Terms, 'face' | 'couponRateBps' | 'paymentsPerYea
   balance * t.face * BigInt(t.couponRateBps) / (10_000n * BigInt(t.paymentsPerYear))
 export const redeemed = (balance: bigint, bps: number, isFinal: boolean) => (isFinal ? balance : balance * BigInt(bps) / 10_000n)
 
+/** Время кластера: сегодня только время, иначе дата и время ("3 Oct 2026, 12:52:34") */
+export function formatClock(unix: bigint): string {
+  const d = new Date(Number(unix) * 1000)
+  if (d.toDateString() === new Date().toDateString()) return d.toLocaleTimeString('en-GB')
+  return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
+}
+
 export function formatTkzt(minor: bigint): string {
   return `${(minor / 100n).toLocaleString('en-US')}.${(minor % 100n).toString().padStart(2, '0')} tKZT`
 }
@@ -70,7 +77,7 @@ export function createAta2022Instruction(payer: Address, ata: Address, owner: Ad
   }
 }
 
-/** ComputeBudget::SetComputeUnitLimit (2): три ATA, register и issue в одной транзакции не влезают в лимит по умолчанию */
+/** ComputeBudget::SetComputeUnitLimit (2): явный потолок 400k; по умолчанию для этой транзакции лимит был бы выше (200k на инструкцию), а так он предсказуем */
 export function setComputeUnitLimitInstruction(units: number): Instruction {
   return { programAddress: address('ComputeBudget111111111111111111111111111111'), data: concat(Uint8Array.of(2), u32le(units)) }
 }

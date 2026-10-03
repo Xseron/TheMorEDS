@@ -5,11 +5,11 @@ import {
   getBondDecoder, getBondEventDecoder, getHolderStateDecoder, getSnapshotDecoder,
   type Bond, type BondEvent, type HolderState, type Snapshot,
 } from '~/utils/bond/generated'
-import { bondPda, vaultPda } from '~/utils/bond'
+import { ata2022, bondPda, vaultPda } from '~/utils/bond'
 
 export type Row = HolderState & { address: Address; balance: bigint }
 export type BondView = {
-  bond: Bond; supply: bigint; vaultBalance: bigint; events: BondEvent[]; rows: Row[]; snapshots: Snapshot[]
+  bond: Bond; supply: bigint; vaultBalance: bigint; issuerTkzt: bigint; events: BondEvent[]; rows: Row[]; snapshots: Snapshot[]
   now: bigint; loadedAt: number
 }
 
@@ -19,9 +19,11 @@ const u64At = (d: Uint8Array | null, offset: number) => (d ? new DataView(d.buff
 const POLL_MS = 10_000
 
 export function useBond(mint: Ref<Address | null>) {
-  const { rpc, bondProgram, accountData, accountsData } = useSolana()
+  const { rpc, bondProgram, tkztMint, accountData, accountsData } = useSolana()
   const view = ref<BondView | null>(null)
   const missing = ref(false)
+  // Сбой чтения, пока данных ещё нет: страница показывает ошибку вместо вечного скелета
+  const error = ref(false)
 
   // Все аккаунты облигации одним запросом: у каждого типа минт сразу после 8 байт дискриминатора
   async function byMint(m: Address) {
@@ -41,15 +43,19 @@ export function useBond(mint: Ref<Address | null>) {
     if (mint.value !== m) return
     if (!bondData) { missing.value = true; view.value = null; return }
     const [{ events, holders, snaps }, slot] = await Promise.all([byMint(m), rpc.getSlot({ commitment: 'confirmed' }).send()])
+    const bond = getBondDecoder().decode(bondData)
     const rows = holders.map(h => ({ ...getHolderStateDecoder().decode(h.data), address: h.address }))
-    const [mintData, vaultData, ...tokens] = await accountsData([m, await vaultPda(bondProgram, m), ...rows.map(r => r.tokenAccount)])
-    const time = await rpc.getBlockTime(slot).send()
+    const issuerAta = await ata2022(bond.issuer, tkztMint)
+    const [mintData, vaultData, issuerData, ...tokens] = await accountsData([m, await vaultPda(bondProgram, m), issuerAta, ...rows.map(r => r.tokenAccount)])
+    // Время блока необязательно: без него идём по локальным часам
+    const time = await rpc.getBlockTime(slot).send().catch(() => null)
     if (mint.value !== m) return // минт сменили, пока ждали RPC
     missing.value = false
     view.value = {
-      bond: getBondDecoder().decode(bondData),
+      bond,
       supply: u64At(mintData ?? null, 36),
       vaultBalance: u64At(vaultData ?? null, 64),
+      issuerTkzt: u64At(issuerData ?? null, 64),
       events: events.map(e => getBondEventDecoder().decode(e.data)).sort((a, b) => a.k - b.k),
       rows: rows.map((r, i) => ({ ...r, balance: u64At(tokens[i] ?? null, 64) })),
       snapshots: snaps.map(s => getSnapshotDecoder().decode(s.data)),
@@ -62,7 +68,12 @@ export function useBond(mint: Ref<Address | null>) {
   let running: Promise<void> | null = null
   let queued: Promise<void> | null = null
   function load(): Promise<void> {
-    if (!running) return (running = fetchView().finally(() => { running = null }))
+    if (!running) {
+      return (running = fetchView().then(() => { error.value = false }, (e) => {
+        if (!view.value) error.value = true
+        throw e
+      }).finally(() => { running = null }))
+    }
     return (queued ??= running.catch(() => {}).then(() => { queued = null; return load() }))
   }
 
@@ -79,6 +90,6 @@ export function useBond(mint: Ref<Address | null>) {
     }, POLL_MS)
   })
   onBeforeUnmount(() => clearInterval(timer))
-  watch(mint, () => { view.value = null; missing.value = false; load().catch(() => {}) })
-  return { view, missing, load, pause, resume }
+  watch(mint, () => { view.value = null; missing.value = false; error.value = false; load().catch(() => {}) })
+  return { view, missing, error, load, pause, resume }
 }

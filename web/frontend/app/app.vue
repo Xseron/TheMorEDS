@@ -6,7 +6,7 @@
         <NuxtLink :to="kase ? '/kase' : '/'" aria-label="MOR" class="flex items-center gap-2.5 no-underline hover:no-underline">
           <img src="/img/mark.svg" alt="" width="36" height="36">
           <span class="text-[20px] font-extrabold tracking-tight text-ink">MOR</span>
-          <span v-if="kase" class="eyebrow ml-1">Corporate actions</span>
+          <span v-if="kase" class="eyebrow ml-1 hidden sm:inline">Corporate actions</span>
         </NuxtLink>
         <nav class="order-last flex w-full gap-7 sm:order-none sm:w-auto">
           <NuxtLink v-for="l in links" :key="l.to" :to="l.to" class="text-[15px] font-bold text-ink no-underline hover:text-violet hover:no-underline" exact-active-class="!text-violet">{{ l.text }}</NuxtLink>

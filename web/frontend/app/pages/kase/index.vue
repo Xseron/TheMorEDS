@@ -22,6 +22,10 @@
           <h2 class="h3 mt-1">Issuer seal</h2>
           <p v-if="issuerName" class="mt-2">Sealed as <b>{{ issuerName }}</b></p>
           <p v-else-if="wallet && !checked" class="note mt-2">Checking the seal</p>
+          <div v-else-if="loadError" class="mt-2">
+            <p class="text-refusal" role="alert">Could not read the seals from Solana devnet</p>
+            <button class="btn mt-3" @click="refresh">Try again</button>
+          </div>
           <template v-else>
             <p class="mt-2">The issuer needs a MOR seal. Seal this wallet with the test attestor, or use the <NuxtLink to="/seal">Seal page</NuxtLink> with NCALayer</p>
             <button class="btn mt-4" :disabled="busy || !wallet" @click="sealIssuer">Seal with the test attestor</button>
@@ -33,7 +37,7 @@
           <p class="note mt-2">Three demo companies hold the bond. Their keys live in this browser and protect nothing</p>
           <ul class="mt-4 space-y-2 text-[15px]">
             <li v-for="(w, i) in wallets" :key="w.address" class="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <b>{{ INVESTORS[i]!.name }}</b><span class="text-muted">{{ INVESTORS[i]!.bonds }} bonds</span>
+              <span><b>{{ INVESTORS[i]!.name }}</b> <span class="text-muted">· {{ INVESTORS[i]!.bonds }} bonds</span></span>
               <AddressText :address="w.address" />
               <StatusBadge :text="sealed[w.address] ? 'Sealed' : 'No seal yet'" :tone="sealed[w.address] ? 'violet' : 'muted'" testid="investor-status" />
             </li>
@@ -89,6 +93,7 @@ const period = ref('120')
 const busy = ref(false)
 // Первая проверка печатей завершена: до неё кнопку печати не показываем
 const checked = ref(false)
+const loadError = ref(false)
 const progress = ref('')
 const error = ref('')
 const createdMint = ref('')
@@ -101,21 +106,28 @@ async function refresh() {
   const seq = ++refreshSeq
   const address = wallet.value?.address
   checked.value = false
-  await load()
-  let name = ''
-  if (address) {
-    const l = await lookup(address, true)
+  loadError.value = false
+  try {
+    await load()
+    let name = ''
+    if (address) {
+      const l = await lookup(address, true)
+      if (seq !== refreshSeq) return
+      name = l.status === 'valid' ? l.seal.name : ''
+    }
+    const flags = await Promise.all(wallets.value.map(async w => !!(await accountData(await sealPda(ids, w.address)))))
     if (seq !== refreshSeq) return
-    name = l.status === 'valid' ? l.seal.name : ''
+    issuerName.value = name
+    sealed.value = Object.fromEntries(wallets.value.map((w, i) => [w.address, flags[i]!]))
+  } catch {
+    if (seq !== refreshSeq) return
+    loadError.value = true
   }
-  const flags = await Promise.all(wallets.value.map(async w => !!(await accountData(await sealPda(ids, w.address)))))
-  if (seq !== refreshSeq) return
-  issuerName.value = name
-  sealed.value = Object.fromEntries(wallets.value.map((w, i) => [w.address, flags[i]!]))
   checked.value = true
 }
 onMounted(refresh)
-watch(() => wallet.value?.address, refresh)
+// Имя прошлого кошелька не показываем, пока проверяется новый
+watch(() => wallet.value?.address, () => { issuerName.value = ''; refresh() })
 
 // Выпущенные в этом браузере облигации: по ним досье решает, показывать ли кнопки инвесторов
 function rememberBond(mint: string) {

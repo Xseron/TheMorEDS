@@ -1,9 +1,9 @@
-import { address, createDefaultRpcTransport, createSolanaRpcFromTransport, getBase64Encoder, type Address, type Instruction } from '@solana/kit'
+import { address, createDefaultRpcTransport, createSolanaRpcFromTransport, getBase64Encoder, type Address, type Instruction, type Rpc, type SolanaRpcApi } from '@solana/kit'
 import { fromHex, type Ids } from '~/utils/registry'
 import { withRetryOn429 } from '~/utils/retryTransport'
 import { submit } from '~/utils/submit'
 
-let rpcCache: { url: string; rpc: ReturnType<typeof createSolanaRpcFromTransport> } | null = null
+let rpcCache: { url: string; rpc: Rpc<SolanaRpcApi> } | null = null
 
 export function useSolana() {
   const cfg = useRuntimeConfig().public

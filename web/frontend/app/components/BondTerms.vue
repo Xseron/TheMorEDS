@@ -1,7 +1,7 @@
 <template>
-  <section class="card-white" aria-live="polite">
+  <section class="card-white">
     <header class="flex flex-wrap items-center justify-between gap-3">
-      <StatusBadge :text="redeemedAll ? 'Redeemed' : 'Active'" :tone="redeemedAll ? 'muted' : 'violet'" />
+      <span aria-live="polite"><StatusBadge :text="redeemedAll ? 'Redeemed' : 'Active'" :tone="redeemedAll ? 'muted' : 'violet'" /></span>
       <AddressText :address="mint" />
     </header>
     <h2 class="mt-5">{{ issuerName || (issuerNoSeal ? 'Issuer without a seal' : shortAddress(view.bond.issuer)) }}</h2>

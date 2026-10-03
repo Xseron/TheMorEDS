@@ -141,9 +141,8 @@ Side track KASE: корпоративные действия по токениз
 
 Клиент программы сгенерирован и лежит в `app/utils/bond/generated`. Обновить его:
 
-    cd ../mor-kase/clients/js && npm run generate
-    cd -    # web/frontend
-    cp -r ../../../mor-kase/clients/js/src/generated app/utils/bond/generated
+    (cd ../../../mor-kase/clients/js && npm run generate)
+    rm -rf app/utils/bond/generated && cp -r ../../../mor-kase/clients/js/src/generated app/utils/bond/generated
 
 `@solana/program-client-core` указан прямой зависимостью, потому что его импортирует сгенерированный код.
 
