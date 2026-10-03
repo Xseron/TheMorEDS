@@ -17,7 +17,7 @@
           <div class="grid gap-5 sm:grid-cols-2"><span v-for="i in 4" :key="i" class="block h-10 animate-pulse rounded bg-lilac-soft" /></div>
         </div>
         <template v-else>
-          <BondTerms :view="view" :mint="mint" :issuer-name="names[view.bond.issuer]" />
+          <BondTerms :view="view" :mint="mint" :issuer-name="names[view.bond.issuer]" :issuer-no-seal="noSeal.has(view.bond.issuer)" />
           <EventTimeline :view="view" :now="now" />
 
           <section class="card-white">
@@ -60,6 +60,9 @@ const mint = computed<Address | null>(() => parseAddress(String(route.params.min
 const { view, missing } = useBond(mint)
 const { lookup } = useRegistry()
 const names = ref<Record<string, string>>({})
+// Подтверждённо без печати: сбой запроса сюда не попадает и повторяется на следующем опросе
+const noSeal = ref(new Set<string>())
+let looking = false
 const title = computed(() => (view.value && names.value[view.value.bond.issuer] ? `Bond of ${names.value[view.value.bond.issuer]}` : 'Bond dossier'))
 
 // Часы кластера между опросами: последнее время блока плюс прошедшее локально
@@ -71,14 +74,18 @@ const now = computed(() => (view.value ? view.value.now + BigInt(Math.floor((tic
 
 const recorded = computed(() => (view.value?.events ?? []).filter(e => e.processed > 0))
 
-watch(() => view.value && [view.value.bond.issuer, ...view.value.rows.map(r => r.owner)].join(), async () => {
-  if (!view.value) return
-  const owners = [view.value.bond.issuer, ...view.value.rows.map(r => r.owner)].filter(o => !(o in names.value))
-  for (const o of owners) {
-    try {
-      const l = await lookup(o)
-      if (l.status === 'valid' || l.status === 'expired') names.value = { ...names.value, [o]: l.seal.name }
-    } catch { /* ��� �������������: ��� ���� ������������ ����� */ }
-  }
+watch(() => view.value && view.value.loadedAt, async () => {
+  if (!view.value || looking) return
+  looking = true
+  try {
+    const owners = [view.value.bond.issuer, ...view.value.rows.map(r => r.owner)].filter(o => !(o in names.value) && !noSeal.value.has(o))
+    for (const o of owners) {
+      try {
+        const l = await lookup(o)
+        if (l.status === 'valid' || l.status === 'expired') names.value = { ...names.value, [o]: l.seal.name }
+        else if (l.status === 'none') noSeal.value = new Set(noSeal.value).add(o)
+      } catch { /* имя необязательно: адрес и так показан */ }
+    }
+  } finally { looking = false }
 })
 </script>
