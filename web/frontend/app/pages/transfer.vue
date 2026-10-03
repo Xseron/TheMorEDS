@@ -14,13 +14,20 @@
         <template v-else>
           <div class="card-white">
             <p>Sender: <AddressText :address="wallet.address" />, balance: <b>{{ balance ?? '…' }}</b> tokens</p>
+            <p v-if="sent" class="note mt-2">Devnet SOL and demo tokens sent</p>
             <div v-if="balanceError" class="mt-4">
               <p class="text-refusal">Could not read the balance from Solana devnet</p>
               <button class="btn mt-3" @click="refresh">Try again</button>
             </div>
 
+            <div v-if="empty" class="mt-5">
+              <button class="btn btn-primary" :disabled="drip.status === 'funding'" @click="request(wallet.address)">Get demo tokens</button>
+              <p v-if="drip.status === 'funding'" class="note mt-3">Funding this wallet with devnet SOL and demo tokens…</p>
+              <p v-else-if="drip.status === 'already'" class="mt-3 text-refusal">This wallet already received demo tokens</p>
+              <p v-else-if="drip.status === 'error'" class="mt-3 text-refusal">{{ drip.error }}</p>
+            </div>
             <div v-if="empty" class="mt-5 rounded-card border border-coral/60 bg-coral/10 p-5 text-[15px]">
-              <p><b>This wallet is empty.</b> Fund it from WSL with devnet SOL and tokens from the issuer. SOL is also available at <a href="https://faucet.solana.com" target="_blank" rel="noopener">faucet.solana.com</a>; only the issuer can mint the token</p>
+              <p><b>This wallet is empty.</b> Get demo tokens above, or fund it from WSL with devnet SOL and tokens from the issuer. SOL is also available at <a href="https://faucet.solana.com" target="_blank" rel="noopener">faucet.solana.com</a>; only the issuer can mint the token</p>
               <pre class="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-[13px] leading-relaxed [overflow-wrap:anywhere]">solana transfer -u devnet {{ wallet.address }} 0.3 --allow-unfunded-recipient
 spl-token -u devnet create-account {{ ids.mint }} --owner {{ wallet.address }} -p TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb --fee-payer ~/.config/solana/id.json
 spl-token -u devnet mint {{ ids.mint }} 50 {{ ownAta }}</pre>
@@ -82,7 +89,7 @@ import {
   DEMO, ataOf, createAtaIdempotentInstruction, decodeSeal, extraMetasPda, parseAddress, policyPda, sealPda, transferCheckedInstruction,
 } from '~/utils/registry'
 
-const description = "Send a Token-2022 demo token whose transfer hook checks the recipient's organization seal and rejects transfers to unsealed wallets."
+const description = "Send a Token-2022 demo token whose transfer hook checks the recipient's organization seal and rejects transfers to unsealed wallets"
 useSeoMeta({ title: 'Sealed transfer demo on Solana devnet', description })
 defineOgImageComponent('Default', { title: 'Sealed transfer demo on Solana devnet', description })
 
@@ -98,6 +105,9 @@ const custom = ref('')
 const busy = ref(false)
 const result = ref<{ ok: boolean; text: string; sig?: string; rejected?: boolean } | null>(null)
 const empty = computed(() => balance.value !== null && (sol.value < 0.001 || balance.value === '0'))
+const { stateOf, request } = useDrip()
+const drip = computed(() => stateOf(wallet.value?.address))
+const sent = ref(false)
 
 async function refresh() {
   if (!wallet.value) return
@@ -123,7 +133,13 @@ async function refresh() {
     balanceError.value = true
   }
 }
-watch(() => wallet.value?.address, () => { balance.value = null; result.value = null; refresh() }, { immediate: true })
+watch(() => wallet.value?.address, () => { balance.value = null; result.value = null; sent.value = false; refresh() }, { immediate: true })
+// Кран подтвердил выдачу: перечитываем баланс; узел RPC может отставать, поэтому при нуле ещё раз чуть позже
+watch(() => [wallet.value?.address, drip.value.status] as const, ([a, s], [prevA, prevS]) => {
+  if (a !== prevA || s !== 'done' || prevS !== 'funding') return
+  sent.value = true
+  refresh().then(() => { if (empty.value) setTimeout(refresh, 4000) })
+})
 
 async function send(to: string) {
   const dest = parseAddress(to)

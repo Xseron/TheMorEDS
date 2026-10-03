@@ -13,6 +13,7 @@
             <WalletButton v-if="!wallet" class="mt-4" />
             <template v-else>
               <p class="mt-3">Connected: <AddressText :address="wallet.address" /> ({{ wallet.name }})</p>
+              <p v-if="stateOf(wallet.address).status === 'funding'" class="note mt-2">Funding this wallet with devnet SOL and demo tokens…</p>
               <p v-if="existing === undefined && !error" class="note mt-2">Checking the registry…</p>
               <div v-else-if="existing" class="mt-5 rounded-control bg-lilac-soft p-4">
                 <p>This wallet is already sealed as <b>{{ existing.seal.name }}</b>. <NuxtLink :to="`/address/${wallet.address}`">Open the extract</NuxtLink></p>
@@ -33,6 +34,7 @@
             <fieldset v-if="mode === 'nca'" class="mt-7 min-w-0 space-y-4">
               <legend class="label">NCA of Kazakhstan</legend>
               <p class="text-[15px]">This is the request you sign with your company's NCA key. The attestor reads the company name and BIN from your certificate</p>
+              <p class="note">Sign with a real NCA certificate of an organization. The test keys from the NCA SDK do not pass NCALayer: its test module (SDK of July 2026) is older than NCALayer 0.9.1</p>
               <pre class="code">{{ request.text }}</pre>
               <p class="note">The request is valid for 10 minutes. Signing refreshes it</p>
               <div class="flex flex-wrap items-center gap-3">
@@ -95,13 +97,14 @@ import { signWithNcaLayer } from '~/utils/ncalayer'
 import { hex, sealPda } from '~/utils/registry'
 import type { Lookup } from '~/composables/useRegistry'
 
-const description = 'Register an organization seal for your Solana wallet: sign with an NCA of Kazakhstan key through NCALayer, or try the test attestor on devnet.'
+const description = 'Register an organization seal for your Solana wallet: sign with an NCA of Kazakhstan key through NCALayer, or try the test attestor on devnet'
 useSeoMeta({ title: 'Seal your wallet with an electronic signature', description })
 defineOgImageComponent('Default', { title: 'Seal your wallet with an electronic signature', description })
 
 const { ids, send, accountData, txLink, attestorUrl, attestorAddress, testAttestorKey } = useSolana()
 const { wallet } = useWallet()
 const { lookup, invalidate } = useRegistry()
+const { stateOf } = useDrip()
 
 type Sealed = Extract<Lookup, { status: 'valid' | 'expired' }>
 const existing = ref<Sealed | null | undefined>(undefined)

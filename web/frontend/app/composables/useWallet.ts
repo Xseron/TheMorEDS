@@ -16,6 +16,7 @@ export function useWallet() {
   const options = useState<WalletOption[]>('wallet-options', () => [])
   const wallet = useState<Wallet | null>('wallet', () => null)
   const connecting = useState('wallet-connecting', () => false)
+  const drip = useDrip()
 
   function refresh() {
     if (!import.meta.client) return
@@ -46,6 +47,8 @@ export function useWallet() {
         wallet.value = c.wallet
       }
       localStorage.setItem(LAST_KEY, name)
+      // Кран только на подключение руками: тихое переподключение при загрузке и смена аккаунта в расширении его не зовут
+      if (!silent && wallet.value) void drip.requestOnce(wallet.value.address)
     } finally {
       connecting.value = false
     }

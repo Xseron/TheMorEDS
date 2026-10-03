@@ -11,9 +11,9 @@ export default defineNuxtConfig({
 
   app: { head: { htmlAttrs: { lang: 'en' }, link: [{ rel: 'icon', type: 'image/svg+xml', href: '/img/mark.svg' }, { rel: 'icon', href: '/favicon.ico', sizes: '48x48' }] } },
   site: {
-    url: process.env.NUXT_PUBLIC_SITE_URL || 'http://localhost:3000',
+    url: process.env.NUXT_PUBLIC_SITE_URL || 'https://morseal.ink',
     name: 'MOR',
-    description: 'MOR links a company to a Solana wallet with its electronic signature.',
+    description: 'MOR links a company to a Solana wallet with its electronic signature',
     defaultLocale: 'en',
   },
   robots: { disallow: ['/address', '/kase/bond'] },
@@ -23,6 +23,8 @@ export default defineNuxtConfig({
     public: {
       rpcUrl: 'https://api.devnet.solana.com',
       attestorUrl: 'http://127.0.0.1:8787',
+      // web/drip за nginx; NUXT_PUBLIC_DRIP_URL переопределяет
+      dripUrl: 'https://morseal.ink/api/drip',
       registry: 'CqbwC3DF4APG6cjRneir1UPuBbh49ttBrKasfc5QP1aP',
       hook: '2A8chB6zt4LCsiiks5NrY3DceHvAVqWkAmMdNpyFkhz2',
       mint: 'HQmD2eDfnR1rad38zPzrVcqa7h6iYBbvNuPTVn4ZVdDc',
