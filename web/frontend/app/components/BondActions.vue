@@ -54,7 +54,7 @@ const event = (k: number) => props.view.events.find(e => e.k === k)
 // Самое раннее наступившее событие, которое ещё не полное
 const pendingK = computed(() => { for (let k = 1; k <= kClock.value; k++) if (!event(k)?.complete) return k; return 0 })
 const pendingRows = computed(() => props.view.rows.filter(r => r.lastEvent === pendingK.value - 1))
-const announceK = computed(() => (event(2)?.redemptionBps || props.now > noticeDeadline(t.value, 2) ? 0 : 2))
+const announceK = computed(() => (event(2)?.redemptionBps || props.now >= noticeDeadline(t.value, 2) || t.value.nEvents <= 2 ? 0 : 2))
 const fundK = computed(() => props.view.events.find(e => e.complete && e.funded === 0n && e.couponTotal + e.principalTotal > 0n)?.k ?? 0)
 const payK = computed(() => props.view.events.find(e => e.complete && e.funded === e.couponTotal + e.principalTotal && e.paid < e.funded)?.k ?? 0)
 const unpaid = computed(() => props.view.snapshots.filter(s => s.k === payK.value && !s.paid && s.balance > 0n))
@@ -82,40 +82,42 @@ async function run(title: string, fn: () => Promise<string>, okText: string) {
   }
 }
 
-const me = () => createNoopSigner(wallet.value!.address)
+// Без кошелька понятная ошибка вместо TypeError
+const need = () => { if (!wallet.value) throw new Error('Connect a wallet first'); return wallet.value.address }
+const me = () => createNoopSigner(need())
 
 const announce = () => run('Redemption announced', async () =>
   solana.send([await getAnnounceRedemptionInstructionAsync({ issuer: me(), mint: props.mint, k: 2, bps: 3_000 }, cfg)]),
-'Event 2 will redeem 30% of each holding, rounded down to whole bonds.')
+'Event 2 will redeem 30% of each holding, rounded down to whole bonds')
 
 const snapshots = () => run(`Event ${pendingK.value} snapshotted`, async () => {
   const k = pendingK.value
   const ixs = await Promise.all(pendingRows.value.map(r => getTakeSnapshotInstructionAsync({ payer: me(), mint: props.mint, tokenAccount: r.tokenAccount, k }, cfg)))
   return solana.send(ixs)
-}, 'Balances at the record date are fixed. Redeemed bonds are burned.')
+}, 'Balances at the record date are fixed. Redeemed bonds are burned')
 
 const faucet = () => run('tKZT received', async () => {
-  const dest = await ata2022(wallet.value!.address, tkztMint)
+  const dest = await ata2022(need(), tkztMint)
   return solana.send([
-    createAta2022Instruction(wallet.value!.address, dest, wallet.value!.address, tkztMint),
+    createAta2022Instruction(need(), dest, need(), tkztMint),
     await getFaucetInstructionAsync({ payer: me(), paymentMint: tkztMint, destination: dest, amount: 5_000_000n }, cfg),
   ])
-}, 'The faucet stands in for the tenge sent to the paying agent.')
+}, 'The faucet stands in for the tenge sent to the paying agent')
 
 const fund = () => run(`Event ${fundK.value} funded`, async () => solana.send([await getFundInstructionAsync({
-  issuer: me(), mint: props.mint, paymentMint: tkztMint, source: await ata2022(wallet.value!.address, tkztMint), vault: props.view.bond.vault, k: fundK.value,
-}, cfg)]), 'The vault holds exactly what the event owes.')
+  issuer: me(), mint: props.mint, paymentMint: tkztMint, source: await ata2022(need(), tkztMint), vault: props.view.bond.vault, k: fundK.value,
+}, cfg)]), 'The vault holds exactly what the event owes')
 
 const payAll = () => run(`Event ${payK.value} paid`, async () => {
   const k = payK.value
   const ixs: Instruction[] = []
   for (const s of unpaid.value) {
     const dest = await ata2022(s.owner, tkztMint)
-    ixs.push(createAta2022Instruction(wallet.value!.address, dest, s.owner, tkztMint))
+    ixs.push(createAta2022Instruction(need(), dest, s.owner, tkztMint))
     ixs.push(await getPayInstructionAsync({ payer: me(), mint: props.mint, tokenAccount: s.tokenAccount, paymentMint: tkztMint, vault: props.view.bond.vault, destination: dest, k }, cfg))
   }
   return solana.send(ixs)
-}, 'Each holder at the record date received the amount from their snapshot.')
+}, 'Each holder at the record date received the amount from their snapshot')
 
 const transfer = (to: 1 | 'c') => run('Transfer passed', async () => {
   const from = investors.value[0]!
@@ -125,5 +127,5 @@ const transfer = (to: 1 | 'c') => run('Transfer passed', async () => {
     createAta2022Instruction(from.address, destination, destOwner, props.mint),
     await transferBondInstruction(bondProgram, ids.registry, props.mint, { source, destination, destinationOwner: destOwner, authority: from.address, amount: 1n }),
   ])
-}, 'The hook found both register rows snapshotted and the recipient sealed.')
+}, 'The hook found both register rows snapshotted and the recipient sealed')
 </script>

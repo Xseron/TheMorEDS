@@ -21,6 +21,7 @@
           <p class="label">Step 2</p>
           <h2 class="h3 mt-1">Issuer seal</h2>
           <p v-if="issuerName" class="mt-2">Sealed as <b>{{ issuerName }}</b></p>
+          <p v-else-if="wallet && !checked" class="note mt-2">Checking the seal</p>
           <template v-else>
             <p class="mt-2">The issuer needs a MOR seal. Seal this wallet with the test attestor, or use the <NuxtLink to="/seal">Seal page</NuxtLink> with NCALayer</p>
             <button class="btn mt-4" :disabled="busy || !wallet" @click="sealIssuer">Seal with the test attestor</button>
@@ -86,6 +87,8 @@ const issuerName = ref('')
 const sealed = ref<Record<string, boolean>>({})
 const period = ref('120')
 const busy = ref(false)
+// Первая проверка печатей завершена: до неё кнопку печати не показываем
+const checked = ref(false)
 const progress = ref('')
 const error = ref('')
 const createdMint = ref('')
@@ -102,6 +105,7 @@ async function refresh() {
   }
   const flags = await Promise.all(wallets.value.map(async w => !!(await accountData(await sealPda(ids, w.address)))))
   sealed.value = Object.fromEntries(wallets.value.map((w, i) => [w.address, flags[i]!]))
+  checked.value = true
 }
 onMounted(refresh)
 watch(() => wallet.value?.address, refresh)

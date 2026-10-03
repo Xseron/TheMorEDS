@@ -23,12 +23,16 @@ test('a full lifecycle with a one-minute period', async ({ page }) => {
   await page.goto('/kase')
   await expect(page.getByText('Issuer:')).toBeVisible({ timeout: 30_000 })
   const seal = page.getByRole('button', { name: 'Seal with the test attestor' })
-  if (await seal.isVisible({ timeout: 10_000 }).catch(() => false)) {
+  // Ждём конца проверки печати: либо уже запечатан, либо появилась кнопка
+  await expect(page.getByText('Sealed as').or(seal)).toBeVisible({ timeout: 60_000 })
+  if (await seal.isVisible()) {
     await seal.click()
     await expect(page.getByText('Sealed as')).toBeVisible({ timeout: 120_000 })
   }
   const prepare = page.getByRole('button', { name: 'Prepare investors' })
-  if (await prepare.isEnabled()) await prepare.click()
+  await expect(prepare).toBeEnabled({ timeout: 60_000 })
+  await prepare.click()
+  await expect(page.getByTestId('investor-status').filter({ hasText: 'No seal yet' })).toHaveCount(0, { timeout: 180_000 })
   await page.getByLabel('1 minute').check()
   await expect(page.getByRole('button', { name: 'Issue bond' })).toBeEnabled({ timeout: 180_000 })
   await page.getByRole('button', { name: 'Issue bond' }).click()
