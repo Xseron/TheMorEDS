@@ -14,6 +14,10 @@
         <template v-else>
           <div class="card-white">
             <p>Sender: <AddressText :address="wallet.address" />, balance: <b>{{ balance ?? '…' }}</b> tokens</p>
+            <div v-if="balanceError" class="mt-4">
+              <p class="text-refusal">Could not read the balance from Solana devnet</p>
+              <button class="btn mt-3" @click="refresh">Try again</button>
+            </div>
 
             <div v-if="empty" class="mt-5 rounded-card border border-coral/60 bg-coral/10 p-5 text-[15px]">
               <p><b>This wallet is empty.</b> Fund it from WSL with devnet SOL and tokens from the issuer. SOL is also available at <a href="https://faucet.solana.com" target="_blank" rel="noopener">faucet.solana.com</a>; only the issuer can mint the token</p>
@@ -52,6 +56,7 @@ spl-token -u devnet mint {{ ids.mint }} 50 {{ ownAta }}</pre>
         <h2 class="h3">Holders</h2>
         <p class="note mt-2">The public devnet RPC does not allow listing holders, so this is the fixed list of demo wallets plus the connected one and the address in the field above</p>
         <button class="btn mt-4" :disabled="holdersBusy" @click="loadHolders">Show holders</button>
+        <p v-if="holdersError" class="mt-4 text-refusal">Could not load the holders from Solana devnet. Try again</p>
         <div v-if="holders.length" class="mt-6 overflow-x-auto">
           <table class="w-full text-[15px]">
             <thead><tr class="label text-left"><th class="pb-2 pr-4">Owner</th><th class="pb-2 pr-4">Balance</th><th class="pb-2">Who stands behind the address</th></tr></thead>
@@ -71,7 +76,7 @@ spl-token -u devnet mint {{ ids.mint }} 50 {{ ownAta }}</pre>
 </template>
 
 <script setup lang="ts">
-import type { Address } from '@solana/kit'
+import { SOLANA_ERROR__JSON_RPC__INVALID_PARAMS, isSolanaError, type Address } from '@solana/kit'
 import { describeError, isHookRejection } from '~/utils/errors'
 import {
   DEMO, ataOf, createAtaIdempotentInstruction, decodeSeal, extraMetasPda, parseAddress, policyPda, sealPda, transferCheckedInstruction,
@@ -86,6 +91,7 @@ const { rpc, ids, txLink, attestorUrl } = solana
 const { wallet } = useWallet()
 
 const balance = ref<string | null>(null)
+const balanceError = ref(false)
 const sol = ref(0)
 const ownAta = ref('')
 const custom = ref('')
@@ -96,15 +102,26 @@ const empty = computed(() => balance.value !== null && (sol.value < 0.001 || bal
 async function refresh() {
   if (!wallet.value) return
   const owner = wallet.value.address
-  const ata = await ataOf(ids, owner)
-  ownAta.value = ata
-  const [tokens, lamports] = await Promise.all([
-    rpc.getTokenAccountBalance(ata).send().then(r => r.value.uiAmountString ?? '0').catch(() => '0'),
-    rpc.getBalance(owner).send().then(r => Number(r.value) / 1e9).catch(() => 0),
-  ])
-  if (wallet.value?.address !== owner) return // кошелёк сменили, пока ждали RPC
-  balance.value = tokens
-  sol.value = lamports
+  balanceError.value = false
+  try {
+    const ata = await ataOf(ids, owner)
+    ownAta.value = ata
+    const [tokens, lamports] = await Promise.all([
+      // Токен-аккаунта ещё нет: RPC отвечает -32602, это настоящий ноль, а не сбой
+      rpc.getTokenAccountBalance(ata).send().then(r => r.value.uiAmountString ?? '0', (e) => {
+        if (isSolanaError(e, SOLANA_ERROR__JSON_RPC__INVALID_PARAMS)) return '0'
+        throw e
+      }),
+      rpc.getBalance(owner).send().then(r => Number(r.value) / 1e9),
+    ])
+    if (wallet.value?.address !== owner) return // кошелёк сменили, пока ждали RPC
+    balance.value = tokens
+    sol.value = lamports
+  } catch {
+    if (wallet.value?.address !== owner) return
+    balance.value = null
+    balanceError.value = true
+  }
 }
 watch(() => wallet.value?.address, () => { balance.value = null; result.value = null; refresh() }, { immediate: true })
 
@@ -132,9 +149,11 @@ async function send(to: string) {
 type Holder = { owner: string; tag: string; balance: string; seal: string | null; valid: boolean }
 const holders = ref<Holder[]>([])
 const holdersBusy = ref(false)
+const holdersError = ref(false)
 
 async function loadHolders() {
   holdersBusy.value = true
+  holdersError.value = false
   try {
     const owners = new Map<Address, string>([[DEMO.issuer, 'issuer'], [DEMO.a, ''], [DEMO.b, ''], [DEMO.c, '']])
     if (wallet.value) owners.set(wallet.value.address, wallet.value.name)
@@ -151,11 +170,13 @@ async function loadHolders() {
       let valid = false
       if (sealAccounts[i]) {
         const s = decodeSeal(sealAccounts[i]!)
-        valid = s.expiresAt >= now
+        valid = s.expiresAt > now
         seal = `${s.name}, ${s.jurisdiction}, ${s.trustLevel === 1 ? 'on-chain' : 'attested'}${valid ? '' : ' (expired)'}`
       }
       return { owner, tag: owners.get(owner) ?? '', balance, seal, valid }
     })
+  } catch {
+    holdersError.value = true
   } finally {
     holdersBusy.value = false
   }

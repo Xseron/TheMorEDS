@@ -42,11 +42,17 @@ export async function submit(rpc: SubmitRpc, wallet: Wallet, instructions: Instr
   const signed = getTransactionDecoder().decode(signedWire)
   const signature = (await rpc.sendTransaction(getBase64EncodedWireTransaction(signed), { encoding: 'base64', preflightCommitment: 'confirmed' }).send()) as Signature
 
+  // Транзакция уже отправлена: сбой RPC (429 и т. п.) не значит, что она не прошла, поэтому опрос продолжается
+  const giveUpAt = Date.now() + 90_000
+  const unconfirmed = () => new Error(`Could not confirm the transaction. Check the signature on an explorer: ${signature}`)
   for (;;) {
-    const { value: [status] } = await rpc.getSignatureStatuses([signature]).send()
+    // undefined: RPC не ответил, null: сеть транзакцию ещё не видела
+    const status = await rpc.getSignatureStatuses([signature]).send().then(r => r.value[0] ?? null, () => undefined)
     if (status?.err) throw new OnChainError(signature, status.err)
     if (status?.confirmationStatus === 'confirmed' || status?.confirmationStatus === 'finalized') return signature
-    if ((await rpc.getBlockHeight({ commitment: 'confirmed' }).send()) > latest.lastValidBlockHeight) throw new ExpiredError()
+    const height = await rpc.getBlockHeight({ commitment: 'confirmed' }).send().catch(() => undefined)
+    if (height !== undefined && height > latest.lastValidBlockHeight) throw status === undefined ? unconfirmed() : new ExpiredError()
+    if (height === undefined && Date.now() > giveUpAt) throw unconfirmed()
     await sleep(1500)
   }
 }
