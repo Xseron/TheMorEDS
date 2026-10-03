@@ -21,3 +21,7 @@ must(read('sitemap.xml').includes('/seal') && !read('sitemap.xml').includes('/ad
 const og = index.match(/property="og:image" content="([^"]+)"/)?.[1] ?? ''
 const ogPath = og.replace(/^https?:\/\/[^/]+/, '')
 must(ogPath.startsWith('/') && existsSync(new URL('.' + ogPath, out)), 'og image file exists in the output')
+if (og.includes('localhost')) {
+  if (process.env.NUXT_PUBLIC_SITE_URL) must(false, 'og:image is on localhost although NUXT_PUBLIC_SITE_URL is set')
+  else console.warn('WARN og:image is on localhost: set NUXT_PUBLIC_SITE_URL before pnpm generate for the real site')
+}

@@ -13,7 +13,7 @@ export default defineNuxtConfig({
   site: {
     url: process.env.NUXT_PUBLIC_SITE_URL || 'http://localhost:3000',
     name: 'MOR',
-    description: 'MOR links a company to a Solana wallet with its qualified electronic signature.',
+    description: 'MOR links a company to a Solana wallet with its electronic signature.',
     defaultLocale: 'en',
   },
   robots: { disallow: ['/address'] },
@@ -39,7 +39,7 @@ export default defineNuxtConfig({
       { name: 'Geist Mono', provider: 'google', weights: [400, 500] },
     ],
   },
-  icon: { serverBundle: { collections: ['ph'] } },
+  icon: { serverBundle: { collections: ['ph'] }, clientBundle: { scan: true } },
 
   // В Nuxt 4 модуль ищет assets/css от корня, а не от app/, поэтому путь задан явно
   tailwindcss: { cssPath: '~/assets/css/tailwind.css' },

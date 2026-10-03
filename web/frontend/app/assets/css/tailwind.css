@@ -10,6 +10,8 @@
   /* .h3: заголовок карточки, который по структуре h2 */
   h3, .h3 { @apply text-[20px] font-bold leading-snug; }
   a { @apply text-violet underline-offset-2 hover:underline; }
+  /* Ссылка внутри текста отличается от него не только цветом */
+  p a, li a, .note a { text-decoration: underline; text-underline-offset: 2px; }
   :focus-visible { outline: 2px solid #6D28D9; outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }

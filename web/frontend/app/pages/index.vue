@@ -19,7 +19,7 @@
           </p>
           <NuxtLink to="/seal" class="btn mt-8">Seal your wallet</NuxtLink>
         </div>
-        <Illustration src="/img/hero.svg" alt="" ratio="20/13" class="order-first md:order-none" />
+        <Illustration src="/img/hero.svg" alt="" ratio="20/13" loading="eager" class="order-first md:order-none" />
       </div>
 
       <div class="band -mx-5 mt-12 rounded-none px-5 py-8 sm:mx-0 sm:rounded-card sm:p-8 md:mt-16 md:p-12">
