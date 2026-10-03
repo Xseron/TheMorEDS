@@ -1,6 +1,5 @@
 // @ts-check
 import withNuxt from './.nuxt/eslint.config.mjs'
 
-export default withNuxt(
-  // Your custom configs here
-)
+// Клиент облигации генерирует Codama в mor-kase, здесь только копия
+export default withNuxt({ ignores: ['app/utils/bond/generated/**'] })

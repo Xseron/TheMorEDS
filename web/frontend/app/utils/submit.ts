@@ -1,7 +1,7 @@
 // Отправка от имени любого кошелька: сначала симуляция через наш RPC, потом подпись, потом ожидание
 import {
   appendTransactionMessageInstructions, compileTransaction, createTransactionMessage, getBase64EncodedWireTransaction,
-  getTransactionDecoder, getTransactionEncoder, pipe, setTransactionMessageFeePayer, setTransactionMessageLifetimeUsingBlockhash,
+  getTransactionDecoder, getTransactionEncoder, partiallySignTransaction, pipe, setTransactionMessageFeePayer, setTransactionMessageLifetimeUsingBlockhash,
   type Address, type Blockhash, type Instruction, type Signature,
 } from '@solana/kit'
 import { ExpiredError, OnChainError, SimulationError } from './errors'
@@ -24,7 +24,7 @@ export type SubmitRpc = {
 
 const wait = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 
-export async function submit(rpc: SubmitRpc, wallet: Wallet, instructions: Instruction[], sleep = wait): Promise<Signature> {
+export async function submit(rpc: SubmitRpc, wallet: Wallet, instructions: Instruction[], sleep = wait, extraSigners: CryptoKeyPair[] = []): Promise<Signature> {
   const { value: latest } = await rpc.getLatestBlockhash().send()
   const lifetime = { blockhash: latest.blockhash as Blockhash, lastValidBlockHeight: latest.lastValidBlockHeight }
   const message = pipe(
@@ -39,7 +39,9 @@ export async function submit(rpc: SubmitRpc, wallet: Wallet, instructions: Instr
   if (sim.value.err) throw new SimulationError(sim.value.err, [...(sim.value.logs ?? [])])
 
   const signedWire = await wallet.signTransaction(new Uint8Array(getTransactionEncoder().encode(unsigned)))
-  const signed = getTransactionDecoder().decode(signedWire)
+  let signed = getTransactionDecoder().decode(signedWire)
+  // Новые аккаунты (минт облигации) подписывают своим ключом после кошелька
+  if (extraSigners.length) signed = await partiallySignTransaction(extraSigners, signed)
   const signature = (await rpc.sendTransaction(getBase64EncodedWireTransaction(signed), { encoding: 'base64', preflightCommitment: 'confirmed' }).send()) as Signature
 
   // Транзакция уже отправлена: сбой RPC (429 и т. п.) не значит, что она не прошла, поэтому опрос продолжается

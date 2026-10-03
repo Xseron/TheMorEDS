@@ -11,9 +11,9 @@ export function useSolana() {
   const ids: Ids = { registry: address(cfg.registry), hook: address(cfg.hook), mint: address(cfg.mint) }
   const { wallet } = useWallet()
 
-  async function send(instructions: Instruction[]) {
+  async function send(instructions: Instruction[], extraSigners: CryptoKeyPair[] = []) {
     if (!wallet.value) throw new Error('Connect a wallet first')
-    return submit(rpc, wallet.value, instructions)
+    return submit(rpc, wallet.value, instructions, undefined, extraSigners)
   }
 
   const toBytes = (b64: string) => new Uint8Array(getBase64Encoder().encode(b64))
@@ -28,6 +28,9 @@ export function useSolana() {
 
   return {
     rpc, ids, send, accountData, accountsData,
+    bondProgram: address(cfg.bondProgram),
+    tkztMint: address(cfg.tkztMint),
+    kaseReferenceMint: address(cfg.kaseReferenceMint),
     attestorUrl: cfg.attestorUrl,
     attestorAddress: address(cfg.attestorAddress),
     testAttestorKey: fromHex(cfg.testAttestorKey),

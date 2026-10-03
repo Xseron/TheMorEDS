@@ -29,6 +29,9 @@ importers:
       '@solana/kit':
         specifier: ^8.4.0
         version: 8.4.0(typescript@6.0.3)
+      '@solana/program-client-core':
+        specifier: ^8.4.0
+        version: 8.4.0(typescript@6.0.3)
       '@solana/wallet-standard-features':
         specifier: ^1.5.0
         version: 1.5.0

@@ -26,6 +26,9 @@ export default defineNuxtConfig({
       registry: 'CqbwC3DF4APG6cjRneir1UPuBbh49ttBrKasfc5QP1aP',
       hook: '2A8chB6zt4LCsiiks5NrY3DceHvAVqWkAmMdNpyFkhz2',
       mint: 'HQmD2eDfnR1rad38zPzrVcqa7h6iYBbvNuPTVn4ZVdDc',
+      bondProgram: '37kyWEQCrscGU8dxhHPGpbxocH4azaZpc4FNip3zEqEv',
+      tkztMint: 'Qukc9v9Wgwuzaa5gLtoh9n2P3o72fXcofLWVk5SVGJH',
+      kaseReferenceMint: '95JPAUBgwwA1fhyeH1BQfrEwvSrfrfU9RU1quP2iCCQc',
       attestorAddress: 'DzEKM1bBSwg199FtSeqmeo7x2HD3kaCn7XBR7FvQcDmy',
       // fixtures/keys/attestor.json, TEST-ONLY: ключ опубликован, такую печать может поставить кто угодно
       testAttestorKey:

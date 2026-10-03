@@ -6,15 +6,15 @@ import type { Wallet } from './submit'
 export const DEMO_WALLET_NAME = 'Built-in demo wallet'
 export const SEED_KEY = 'mor-demo-seed'
 
-export async function demoWallet(storage: Pick<Storage, 'getItem' | 'setItem'>): Promise<Wallet> {
-  let seed = fromHex(storage.getItem(SEED_KEY) ?? '')
+export async function demoWallet(storage: Pick<Storage, 'getItem' | 'setItem'>, key = SEED_KEY, name = DEMO_WALLET_NAME): Promise<Wallet> {
+  let seed = fromHex(storage.getItem(key) ?? '')
   if (seed.length !== 32) {
     seed = crypto.getRandomValues(new Uint8Array(32))
-    storage.setItem(SEED_KEY, hex(seed))
+    storage.setItem(key, hex(seed))
   }
   const keyPair = await createKeyPairFromPrivateKeyBytes(seed)
   return {
-    name: DEMO_WALLET_NAME,
+    name,
     address: await getAddressFromPublicKey(keyPair.publicKey),
     async signTransaction(wire) {
       const signed = await signTransaction([keyPair], getTransactionDecoder().decode(wire))
