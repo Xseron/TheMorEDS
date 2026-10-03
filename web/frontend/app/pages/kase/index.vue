@@ -53,6 +53,7 @@
         <div v-if="error" class="card-white">
           <SealStatus status="rejected" class="mb-4" />
           <p class="text-refusal">{{ error }}</p>
+          <p v-if="createdMint" class="mt-4"><NuxtLink :to="`/kase/bond/${createdMint}`">Open the bond</NuxtLink></p>
         </div>
         <template #fallback>
           <div class="card-white"><span class="block h-6 w-48 animate-pulse rounded bg-lilac-soft" /></div>
@@ -63,7 +64,7 @@
 </template>
 
 <script setup lang="ts">
-import { createNoopSigner, generateKeyPair, getAddressFromPublicKey } from '@solana/kit'
+import { createNoopSigner, generateKeyPair, getAddressFromPublicKey, type Instruction } from '@solana/kit'
 import { attestWithTestKey, registerInstructions } from '~/utils/attestation'
 import { ata2022, createAta2022Instruction, demoTerms } from '~/utils/bond'
 import { getCreateBondInstructionAsync, getIssueInstructionAsync, getRegisterHolderInstructionAsync } from '~/utils/bond/generated'
@@ -87,6 +88,7 @@ const period = ref('120')
 const busy = ref(false)
 const progress = ref('')
 const error = ref('')
+const createdMint = ref('')
 const step = computed(() => (!wallet.value ? 1 : !issuerName.value ? 2 : wallets.value.some(w => !sealed.value[w.address]) ? 3 : 4))
 const now = () => BigInt(Math.floor(Date.now() / 1000))
 
@@ -104,9 +106,20 @@ async function refresh() {
 onMounted(refresh)
 watch(() => wallet.value?.address, refresh)
 
+// Выпущенные в этом браузере облигации: по ним досье решает, показывать ли кнопки инвесторов
+function rememberBond(mint: string) {
+  try {
+    const mine = JSON.parse(localStorage.getItem('kase-bonds') ?? '[]') as string[]
+    localStorage.setItem('kase-bonds', JSON.stringify([...mine, mint]))
+  } catch {
+    try { localStorage.setItem('kase-bonds', JSON.stringify([mint])) } catch { /* хранилище закрыто */ }
+  }
+}
+
 async function run(fn: () => Promise<void>) {
   busy.value = true
   error.value = ''
+  createdMint.value = ''
   try { await fn() } catch (e) { error.value = describeError(e, { attestorUrl }) } finally { busy.value = false; progress.value = '' }
 }
 
@@ -133,18 +146,21 @@ const issue = () => run(async () => {
     issuer, issuerSeal: await sealPda(ids, issuer.address), mint: createNoopSigner(mint), paymentMint: tkztMint,
     terms: demoTerms(now(), BigInt(period.value)),
   }, { programAddress: bondProgram })], [mintKeys])
+  // Минт запоминаем сразу: если дальше что-то упадёт, облигация уже есть и досье её покажет
+  createdMint.value = mint
+  rememberBond(mint)
+  // Все три держателя одной транзакцией: выпуск открыт только до первой даты фиксации, а подтверждений кошелька должно быть два
+  progress.value = 'Registering the investors and issuing the bonds'
+  const holderInstructions: Instruction[] = []
   for (const [i, w] of wallets.value.entries()) {
-    progress.value = `Registering ${INVESTORS[i]!.name} and issuing ${INVESTORS[i]!.bonds} bonds`
     const tokenAccount = await ata2022(w.address, mint)
-    await solana.send([
+    holderInstructions.push(
       createAta2022Instruction(issuer.address, tokenAccount, w.address, mint),
       await getRegisterHolderInstructionAsync({ payer: issuer, mint, tokenAccount, ownerSeal: await sealPda(ids, w.address) }, { programAddress: bondProgram }),
       await getIssueInstructionAsync({ issuer, mint, tokenAccount, amount: INVESTORS[i]!.bonds }, { programAddress: bondProgram }),
-    ])
+    )
   }
-  // Выпущенные в этом браузере облигации: по ним досье решает, показывать ли кнопки инвесторов
-  const mine = JSON.parse(localStorage.getItem('kase-bonds') ?? '[]') as string[]
-  localStorage.setItem('kase-bonds', JSON.stringify([...mine, mint]))
+  await solana.send(holderInstructions)
   await navigateTo(`/kase/bond/${mint}`)
 })
 </script>
