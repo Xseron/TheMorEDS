@@ -131,6 +131,24 @@ Nuxt 4, pnpm. Лендинг и демо: выписка «кто стоит з�
 
 Тесты: `pnpm test` (Vitest), `pnpm test:e2e` (Playwright против devnet; e2e-кошелёк из `test/e2e/fixtures/wallet.json` нужно один раз пополнить, адрес печатает `node test/e2e/fixtures/address.mjs`), `pnpm check:build` после `pnpm generate`.
 
+### Корпоративные действия по облигации (`/kase`)
+
+Side track KASE: корпоративные действия по токенизированной облигации на Solana devnet (выпуск, купон, погашение). Программа живёт в отдельном репозитории `mor-kase`: devnet-программа `37kyWEQCrscGU8dxhHPGpbxocH4azaZpc4FNip3zEqEv`, эталонная облигация (mint) `95JPAUBgwwA1fhyeH1BQfrEwvSrfrfU9RU1quP2iCCQc`. Денежная нога имитируется: `tKZT` (mint `Qukc9v9Wgwuzaa5gLtoh9n2P3o72fXcofLWVk5SVGJH`) это тестовый токен из крана программы.
+
+Адреса задаются переменными `NUXT_PUBLIC_BOND_PROGRAM`, `NUXT_PUBLIC_TKZT_MINT`, `NUXT_PUBLIC_KASE_REFERENCE_MINT`.
+
+Демо-инвесторы (`kase-investor-1…3`) хранят ключи в `localStorage` браузера; им нужен SOL от подключённого кошелька. Выпуск требует двух подтверждений в кошельке.
+
+Клиент программы сгенерирован и лежит в `app/utils/bond/generated`. Обновить его:
+
+    cd ../mor-kase/clients/js && npm run generate
+    cd -    # web/frontend
+    cp -r ../../../mor-kase/clients/js/src/generated app/utils/bond/generated
+
+`@solana/program-client-core` указан прямой зависимостью, потому что его импортирует сгенерированный код.
+
+E2E для `/kase`: `E2E_PORT=3100 pnpm test:e2e kase.spec.ts` (переменная порта нужна, чтобы не подхватить dev-сервер из другого чекаута). Полному жизненному циклу нужно не меньше 0,6 SOL на e2e-кошельке.
+
 ## Devnet
 
     cd scripts/devnet-v1 && npm install
