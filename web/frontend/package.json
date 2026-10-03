@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "check:build": "node test/build/check.mjs"
+    "check:build": "node test/build/check.mjs",
+    "illustrations": "node scripts/illustrations.mjs"
   },
   "dependencies": {
     "@nuxt/eslint": "1.17.0",
@@ -33,6 +34,7 @@
   "devDependencies": {
     "@iconify-json/ph": "^1.2.2",
     "@playwright/test": "^1.63.0",
+    "svgo": "^4.1.0",
     "typescript": "~6.0.3",
     "vitest": "^5.0.3"
   }
