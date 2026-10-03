@@ -221,14 +221,14 @@ const faq = [
 // Шаблон сайта дописывает « | MOR», поэтому заголовок без названия в начале (copy.md, Meta)
 useSeoMeta({
   title: 'On-chain KYC for companies on Solana',
-  description: 'MOR links a company to a Solana wallet with its electronic signature. Check who stands behind an address, seal your wallet, try the sealed transfer.',
+  description: 'MOR links a company to a Solana wallet with its electronic signature. Check who stands behind an address, seal your wallet, try the sealed transfer',
   ogTitle: 'MOR: on-chain KYC with electronic signatures',
-  ogDescription: 'MOR links a company to a Solana wallet so applications can verify its identity. Live demo on Solana devnet.',
+  ogDescription: 'MOR links a company to a Solana wallet so applications can verify its identity. Live demo on Solana devnet',
   twitterCard: 'summary_large_image',
 })
 defineOgImageComponent('Default', {
   title: 'On-chain KYC with electronic signatures',
-  description: 'MOR links a company to a Solana wallet so applications can verify its identity.',
+  description: 'MOR links a company to a Solana wallet so applications can verify its identity',
 })
 useSchemaOrg([
   defineOrganization({ name: 'MOR', logo: '/img/mark.png', sameAs: ['https://t.me/dtorossyan', 'https://t.me/ablStartup'] }),

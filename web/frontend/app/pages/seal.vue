@@ -34,6 +34,7 @@
             <fieldset v-if="mode === 'nca'" class="mt-7 min-w-0 space-y-4">
               <legend class="label">NCA of Kazakhstan</legend>
               <p class="text-[15px]">This is the request you sign with your company's NCA key. The attestor reads the company name and BIN from your certificate</p>
+              <p class="note">Sign with a real NCA certificate of an organization. The test keys from the NCA SDK do not pass NCALayer: its test module (SDK of July 2026) is older than NCALayer 0.9.1</p>
               <pre class="code">{{ request.text }}</pre>
               <p class="note">The request is valid for 10 minutes. Signing refreshes it</p>
               <div class="flex flex-wrap items-center gap-3">
