@@ -6,8 +6,8 @@ export default defineNuxtConfig({
 
   // Лендинг и оболочки страниц уходят в статический HTML, выписка читает devnet только в браузере
   ssr: true,
-  nitro: { prerender: { routes: ['/', '/seal', '/transfer'], crawlLinks: false } },
-  routeRules: { '/address/**': { ssr: false } },
+  nitro: { prerender: { routes: ['/', '/seal', '/transfer', '/kase'], crawlLinks: false } },
+  routeRules: { '/address/**': { ssr: false }, '/kase/bond/**': { ssr: false } },
 
   app: { head: { htmlAttrs: { lang: 'en' }, link: [{ rel: 'icon', type: 'image/svg+xml', href: '/img/mark.svg' }, { rel: 'icon', href: '/favicon.ico', sizes: '48x48' }] } },
   site: {
@@ -16,7 +16,7 @@ export default defineNuxtConfig({
     description: 'MOR links a company to a Solana wallet with its electronic signature.',
     defaultLocale: 'en',
   },
-  robots: { disallow: ['/address'] },
+  robots: { disallow: ['/address', '/kase/bond'] },
   ogImage: { defaults: { width: 1200, height: 630 }, fonts: ['Manrope:500', 'Manrope:700', 'Manrope:800'] },
 
   runtimeConfig: {
