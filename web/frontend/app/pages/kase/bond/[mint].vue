@@ -3,7 +3,7 @@
     <header>
       <p class="eyebrow">Bond dossier</p>
       <h1 class="mt-3">{{ title }}</h1>
-      <p class="mt-5 text-muted">Terms, events and holder registers, read from Solana devnet every 5 seconds</p>
+      <p class="mt-5 text-muted">Terms, events and holder registers, read from Solana devnet every 10 seconds</p>
     </header>
 
     <div class="band -mx-5 space-y-4 rounded-none p-5 sm:mx-0 sm:rounded-card md:p-10 lg:self-start">
@@ -19,7 +19,7 @@
         <template v-else>
           <BondTerms :view="view" :mint="mint" :issuer-name="names[view.bond.issuer]" :issuer-no-seal="noSeal.has(view.bond.issuer)" />
           <EventTimeline :view="view" :now="now" />
-          <BondActions :view="view" :mint="mint" :now="now" :names="names" @changed="load" />
+          <BondActions :view="view" :mint="mint" :now="now" :names="names" @busy="onBusy" @changed="reload" />
 
           <section class="card-white">
             <h2 class="h3">Register of holders now</h2>
@@ -58,7 +58,10 @@ useSeoMeta({ title: 'Bond dossier', robots: 'noindex' })
 const route = useRoute()
 const referenceMint = useRuntimeConfig().public.kaseReferenceMint
 const mint = computed<Address | null>(() => parseAddress(String(route.params.mint)))
-const { view, missing, load } = useBond(mint)
+const { view, missing, load, pause, resume } = useBond(mint)
+// Действие идёт: опрос стоит. После него один свежий прогон, сбой просто ждёт следующего опроса
+const onBusy = (b: boolean) => (b ? pause() : resume())
+const reload = () => load().catch(() => {})
 const { lookup } = useRegistry()
 const names = ref<Record<string, string>>({})
 // Подтверждённо без печати: сбой запроса сюда не попадает и повторяется на следующем опросе

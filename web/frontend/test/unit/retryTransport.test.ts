@@ -39,9 +39,17 @@ describe('withRetryOn429', () => {
     expect(f.calls()).toBe(1)
   })
 
-  it('gives up after five retries', async () => {
+  it('waits through the whole backoff before the last try', async () => {
+    const f = fake(Array(7).fill(http(429)))
+    const delays: number[] = []
+    expect(await call(withRetryOn429(f.transport, async ms => { delays.push(ms) }))).toBe('ok')
+    expect(f.calls()).toBe(8)
+    expect(delays).toEqual([500, 1_000, 2_000, 4_000, 8_000, 8_000, 8_000])
+  })
+
+  it('gives up after seven retries', async () => {
     const f = fake(Array(10).fill(http(429)))
     await expect(call(withRetryOn429(f.transport, async () => {}))).rejects.toBeInstanceOf(SolanaError)
-    expect(f.calls()).toBe(6)
+    expect(f.calls()).toBe(8)
   })
 })

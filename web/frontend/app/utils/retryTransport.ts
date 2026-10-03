@@ -1,7 +1,8 @@
 // Публичный RPC отвечает 429 до обработки запроса, поэтому повтор безопасен для любого метода, включая sendTransaction
 import { isSolanaError, SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR, type RpcTransport } from '@solana/kit'
 
-export const RETRY_DELAYS_MS = [500, 1_000, 2_000, 4_000, 8_000]
+// Около 31,5 с в сумме: досье и действие делят один лимит публичного RPC
+export const RETRY_DELAYS_MS = [500, 1_000, 2_000, 4_000, 8_000, 8_000, 8_000]
 const wait = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 
 export function withRetryOn429(transport: RpcTransport, sleep: (ms: number) => Promise<void> = wait): RpcTransport {

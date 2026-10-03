@@ -1,5 +1,5 @@
 // Досье облигации: аккаунты программы по минту, балансы, время кластера. Обновляется, пока вкладка видна
-import { getBase58Decoder, getBase64Encoder, type Address } from '@solana/kit'
+import { getBase64Encoder, type Address, type ReadonlyUint8Array } from '@solana/kit'
 import {
   BOND_EVENT_DISCRIMINATOR, HOLDER_STATE_DISCRIMINATOR, SNAPSHOT_DISCRIMINATOR,
   getBondDecoder, getBondEventDecoder, getHolderStateDecoder, getSnapshotDecoder,
@@ -14,36 +14,33 @@ export type BondView = {
 }
 
 const b64 = getBase64Encoder()
-const b58 = getBase58Decoder()
 // Токен-аккаунт: amount с 64-го байта; минт: supply с 36-го
 const u64At = (d: Uint8Array | null, offset: number) => (d ? new DataView(d.buffer, d.byteOffset).getBigUint64(offset, true) : 0n)
+const POLL_MS = 10_000
 
 export function useBond(mint: Ref<Address | null>) {
   const { rpc, bondProgram, accountData, accountsData } = useSolana()
   const view = ref<BondView | null>(null)
   const missing = ref(false)
 
-  async function byMint(m: Address, discriminator: Uint8Array) {
+  // Все аккаунты облигации одним запросом: у каждого типа минт сразу после 8 байт дискриминатора
+  async function byMint(m: Address) {
     const res = await rpc.getProgramAccounts(bondProgram, {
       encoding: 'base64',
-      filters: [
-        { memcmp: { offset: 0n, bytes: b58.decode(discriminator) as never, encoding: 'base58' } },
-        { memcmp: { offset: 8n, bytes: m as never, encoding: 'base58' } },
-      ],
+      filters: [{ memcmp: { offset: 8n, bytes: m as never, encoding: 'base58' } }],
     }).send()
-    return res.map(r => ({ address: r.pubkey, data: new Uint8Array(b64.encode(r.account.data[0])) }))
+    const all = res.map(r => ({ address: r.pubkey, data: new Uint8Array(b64.encode(r.account.data[0])) }))
+    const of = (d: ReadonlyUint8Array) => all.filter(a => a.data.length >= 8 && d.every((b, i) => a.data[i] === b))
+    return { events: of(BOND_EVENT_DISCRIMINATOR), holders: of(HOLDER_STATE_DISCRIMINATOR), snaps: of(SNAPSHOT_DISCRIMINATOR) }
   }
 
-  async function load() {
+  async function fetchView() {
     const m = mint.value
     if (!m) return
     const bondData = await accountData(await bondPda(bondProgram, m))
     if (mint.value !== m) return
     if (!bondData) { missing.value = true; view.value = null; return }
-    const [events, holders, snaps, slot] = await Promise.all([
-      byMint(m, BOND_EVENT_DISCRIMINATOR), byMint(m, HOLDER_STATE_DISCRIMINATOR), byMint(m, SNAPSHOT_DISCRIMINATOR),
-      rpc.getSlot({ commitment: 'confirmed' }).send(),
-    ])
+    const [{ events, holders, snaps }, slot] = await Promise.all([byMint(m), rpc.getSlot({ commitment: 'confirmed' }).send()])
     const rows = holders.map(h => ({ ...getHolderStateDecoder().decode(h.data), address: h.address }))
     const [mintData, vaultData, ...tokens] = await accountsData([m, await vaultPda(bondProgram, m), ...rows.map(r => r.tokenAccount)])
     const time = await rpc.getBlockTime(slot).send()
@@ -61,12 +58,27 @@ export function useBond(mint: Ref<Address | null>) {
     }
   }
 
+  // Один прогон за раз. Просьба во время прогона ждёт его и запускает ещё один, уже со свежими данными
+  let running: Promise<void> | null = null
+  let queued: Promise<void> | null = null
+  function load(): Promise<void> {
+    if (!running) return (running = fetchView().finally(() => { running = null }))
+    return (queued ??= running.catch(() => {}).then(() => { queued = null; return load() }))
+  }
+
+  // Пока идёт действие, опрос стоит и не отнимает у него лимит RPC
+  let paused = false
+  const pause = () => { paused = true }
+  const resume = () => { paused = false }
+
   let timer: ReturnType<typeof setInterval> | undefined
   onMounted(() => {
     load().catch(() => {})
-    timer = setInterval(() => { if (document.visibilityState === 'visible') load().catch(() => {}) }, 5_000)
+    timer = setInterval(() => {
+      if (!running && !paused && document.visibilityState === 'visible') load().catch(() => {})
+    }, POLL_MS)
   })
   onBeforeUnmount(() => clearInterval(timer))
   watch(mint, () => { view.value = null; missing.value = false; load().catch(() => {}) })
-  return { view, missing, load }
+  return { view, missing, load, pause, resume }
 }

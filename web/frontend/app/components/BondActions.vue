@@ -36,7 +36,7 @@ import { DEMO } from '~/utils/registry'
 import { submit, type Wallet } from '~/utils/submit'
 
 const props = defineProps<{ view: BondView; mint: Address; now: bigint; names: Record<string, string> }>()
-const emit = defineEmits<{ changed: [] }>()
+const emit = defineEmits<{ changed: []; busy: [boolean] }>()
 
 const solana = useSolana()
 const { rpc, ids, bondProgram, tkztMint, txLink, attestorUrl } = solana
@@ -69,6 +69,7 @@ onMounted(async () => {
 
 async function run(title: string, fn: () => Promise<string>, okText: string) {
   busy.value = true
+  emit('busy', true)
   result.value = null
   try {
     const sig = await fn()
@@ -78,6 +79,7 @@ async function run(title: string, fn: () => Promise<string>, okText: string) {
     result.value = { ok: false, title: rejected ? 'Transfer rejected' : 'Action failed', text: describeError(e, { attestorUrl }), rejected }
   } finally {
     busy.value = false
+    emit('busy', false)
     emit('changed')
   }
 }
