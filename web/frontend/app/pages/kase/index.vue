@@ -95,15 +95,22 @@ const createdMint = ref('')
 const step = computed(() => (!wallet.value ? 1 : !issuerName.value ? 2 : wallets.value.some(w => !sealed.value[w.address]) ? 3 : 4))
 const now = () => BigInt(Math.floor(Date.now() / 1000))
 
+// Счётчик: ответы устаревших обновлений (onMounted и смена кошелька накладываются) отбрасываются
+let refreshSeq = 0
 async function refresh() {
+  const seq = ++refreshSeq
+  const address = wallet.value?.address
+  checked.value = false
   await load()
-  if (wallet.value) {
-    const l = await lookup(wallet.value.address, true)
-    issuerName.value = l.status === 'valid' ? l.seal.name : ''
-  } else {
-    issuerName.value = ''
+  let name = ''
+  if (address) {
+    const l = await lookup(address, true)
+    if (seq !== refreshSeq) return
+    name = l.status === 'valid' ? l.seal.name : ''
   }
   const flags = await Promise.all(wallets.value.map(async w => !!(await accountData(await sealPda(ids, w.address)))))
+  if (seq !== refreshSeq) return
+  issuerName.value = name
   sealed.value = Object.fromEntries(wallets.value.map((w, i) => [w.address, flags[i]!]))
   checked.value = true
 }
