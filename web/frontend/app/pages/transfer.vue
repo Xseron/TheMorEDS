@@ -20,6 +20,7 @@
               <pre class="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-[13px] leading-relaxed [overflow-wrap:anywhere]">solana transfer -u devnet {{ wallet.address }} 0.3 --allow-unfunded-recipient
 spl-token -u devnet create-account {{ ids.mint }} --owner {{ wallet.address }} -p TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb --fee-payer ~/.config/solana/id.json
 spl-token -u devnet mint {{ ids.mint }} 50 {{ ownAta }}</pre>
+              <p class="note mt-3">Judges: ask <a href="https://t.me/dtorossyan" target="_blank" rel="noopener">@dtorossyan</a> on Telegram for demo tokens.</p>
             </div>
 
             <div class="mt-6 grid gap-2">

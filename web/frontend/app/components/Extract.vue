@@ -5,7 +5,7 @@
       <SealStatus v-if="lookup" :status="lookup.status" />
       <span v-else class="h-7 w-28 animate-pulse rounded-full bg-lilac-soft" />
       <AddressText v-if="lookup && lookup.status !== 'invalid'" :address="lookup.address" />
-      <span v-else class="font-mono text-[14px] text-muted">{{ address }}</span>
+      <span v-else class="min-w-0 font-mono text-[14px] text-muted [overflow-wrap:anywhere]">{{ address }}</span>
     </header>
 
     <template v-if="sealed">

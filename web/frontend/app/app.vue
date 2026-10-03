@@ -3,7 +3,7 @@
     <header>
       <!-- На телефоне ссылки уходят во вторую строку, кошелёк остаётся справа от логотипа -->
       <div class="container-page flex flex-wrap items-center gap-x-10 gap-y-2 py-4 sm:h-[72px] sm:flex-nowrap sm:py-0">
-        <NuxtLink to="/" class="flex items-center gap-2.5 no-underline hover:no-underline">
+        <NuxtLink to="/" aria-label="MOR" class="flex items-center gap-2.5 no-underline hover:no-underline">
           <img src="/img/mark.svg" alt="" width="36" height="36">
           <span class="text-[20px] font-extrabold tracking-tight text-ink">MOR</span>
         </NuxtLink>
@@ -15,7 +15,8 @@
         </div>
       </div>
     </header>
-    <main class="container-page flex-1 py-12">
+    <!-- w-full: с mx-auto элемент колоночного flex не растягивается и ширился бы по широкой таблице -->
+    <main class="container-page w-full flex-1 py-12">
       <NuxtPage />
     </main>
     <footer class="border-t border-line">
