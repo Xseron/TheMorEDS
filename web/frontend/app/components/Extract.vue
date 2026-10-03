@@ -1,6 +1,6 @@
 <!-- eslint-disable vue/multi-word-component-names -->
 <template>
-  <section class="card-white" aria-live="polite">
+  <section class="card-white relative" aria-live="polite">
     <header class="flex flex-wrap items-center justify-between gap-3">
       <SealStatus v-if="lookup" :status="lookup.status" />
       <span v-else class="h-7 w-28 animate-pulse rounded-full bg-lilac-soft" />
@@ -22,12 +22,18 @@
         <ExtractRow label="Controller"><AddressText :address="lookup.seal.controller" /></ExtractRow>
         <ExtractRow label="Seal account"><AddressText :address="lookup.sealPda" /></ExtractRow>
         <ExtractRow v-if="lookup.seal.certificate !== ZERO_ADDRESS" label="Certificate"><AddressText :address="lookup.seal.certificate" /></ExtractRow>
-        <ExtractRow label="Identifier hash" class="sm:col-span-2">
+        <ExtractRow label="Identifier hash" class="sm:col-start-1">
           <span class="font-mono text-[13px]">{{ lookup.seal.identifierHash }}</span>
           <p class="note mt-1">sha256(salt, jurisdiction, BIN or registry number); the salt stays with the owner, no personal data on-chain</p>
         </ExtractRow>
-        <ExtractRow label="Checked" class="sm:col-span-2">slot {{ lookup.slot.toLocaleString('en-US') }}, {{ lookup.checkedAt.toLocaleTimeString('en-GB') }}</ExtractRow>
+        <ExtractRow label="Checked" class="sm:col-start-1">slot {{ lookup.slot.toLocaleString('en-US') }}, {{ lookup.checkedAt.toLocaleTimeString('en-GB') }}</ExtractRow>
       </dl>
+      <!-- Оттиск печати в правом нижнем углу, где правая колонка пуста; на телефоне отдельной строкой справа, чтобы не закрыть текст -->
+      <div class="pointer-events-none mt-2 flex justify-end sm:absolute sm:bottom-6 sm:right-8 sm:mt-0">
+        <div class="-rotate-[8deg]">
+          <Stamp :tone="lookup.status === 'valid' ? 'violet' : 'muted'" :size="150" class="max-sm:h-[110px] max-sm:w-[110px]" />
+        </div>
+      </div>
     </template>
     <p v-else-if="lookup?.status === 'none'" class="mt-5">No seal. The registry does not know who stands behind this address.</p>
     <p v-else-if="lookup?.status === 'invalid'" class="mt-5">This is not a Solana address.</p>
