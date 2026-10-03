@@ -14,6 +14,8 @@ test('NCA path: NCALayer signs, the attestor answers, the wallet registers', asy
   await page.routeWebSocket('wss://127.0.0.1:13579/', (ws) => {
     ws.onMessage((raw) => {
       const req = JSON.parse(String(raw))
+      expect(req).toMatchObject({ module: 'kz.gov.pki.knca.commonUtils', method: 'createCAdESFromBase64' })
+      expect([req.args[0], req.args[1], req.args[3]]).toEqual(['PKCS12', 'SIGNATURE', true])
       requestText = Buffer.from(req.args[2], 'base64').toString('utf8')
       ws.send(JSON.stringify({ result: { version: '1.4' } }))
       ws.send(JSON.stringify({ code: '200', responseObject: 'ZmFrZS1jbXM=' }))

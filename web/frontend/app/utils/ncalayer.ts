@@ -21,7 +21,7 @@ export function signWithNcaLayer(text: string, url = NCA_URL, WS: typeof WebSock
       let m: { result?: { version?: string }; code?: string; responseObject?: string; message?: string }
       try { m = JSON.parse(String(ev.data)) } catch { return }
       if (m.result?.version) return // приветствие NCALayer
-      if (m.code === '200' && typeof m.responseObject === 'string') return finish(() => resolve(m.responseObject!))
+      if (m.code === '200' && typeof m.responseObject === 'string' && m.responseObject.length > 0) return finish(() => resolve(m.responseObject!))
       finish(() => reject(/cancel/i.test(m.message ?? '') ? new NcaCancelled() : new Error(`NCALayer: ${m.message ?? m.code ?? 'unexpected reply'}`)))
     }
   })

@@ -30,6 +30,7 @@
             <legend class="px-1">NCA of Kazakhstan</legend>
             <p class="text-[15px]">This is the request you sign with your company's NCA key. The attestor reads the company name and BIN from your certificate.</p>
             <pre class="overflow-x-auto border border-rule bg-seal-tint p-3 font-mono text-[13px]">{{ request.text }}</pre>
+            <p class="note">The request is valid for 10 minutes. Signing refreshes it.</p>
             <button class="btn btn-primary" :disabled="busy" @click="attestNca">Sign with NCALayer</button>
             <span v-if="busy" class="note ml-3">{{ stage }}</span>
           </fieldset>
@@ -143,6 +144,8 @@ async function attestNca() {
   error.value = ''
   busy.value = true
   try {
+    // Свежий дедлайн на каждую подпись; <pre> перерисуется тем же текстом, что уходит в NCALayer
+    request.value = requestText(ids, wallet.value!.address, now())
     stage.value = 'Waiting for NCALayer…'
     const cms = await signWithNcaLayer(request.value.text)
     stage.value = 'Asking the attestor…'
