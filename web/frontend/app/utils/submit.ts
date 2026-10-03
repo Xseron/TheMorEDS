@@ -1,6 +1,6 @@
 // Отправка от имени любого кошелька: сначала симуляция через наш RPC, потом подпись, потом ожидание
 import {
-  appendTransactionMessageInstructions, compileTransaction, createTransactionMessage, getBase64EncodedWireTransaction,
+  appendTransactionMessageInstructions, assertIsFullySignedTransaction, compileTransaction, createTransactionMessage, getBase64EncodedWireTransaction,
   getTransactionDecoder, getTransactionEncoder, partiallySignTransaction, pipe, setTransactionMessageFeePayer, setTransactionMessageLifetimeUsingBlockhash,
   type Address, type Blockhash, type Instruction, type Signature,
 } from '@solana/kit'
@@ -42,6 +42,8 @@ export async function submit(rpc: SubmitRpc, wallet: Wallet, instructions: Instr
   let signed = getTransactionDecoder().decode(signedWire)
   // Новые аккаунты (минт облигации) подписывают своим ключом после кошелька
   if (extraSigners.length) signed = await partiallySignTransaction(extraSigners, signed)
+  // Не хватает подписи: понятная ошибка здесь, а не отказ RPC
+  assertIsFullySignedTransaction(signed)
   const signature = (await rpc.sendTransaction(getBase64EncodedWireTransaction(signed), { encoding: 'base64', preflightCommitment: 'confirmed' }).send()) as Signature
 
   // Транзакция уже отправлена: сбой RPC (429 и т. п.) не значит, что она не прошла, поэтому опрос продолжается

@@ -1,5 +1,5 @@
 // Встроенный демо-кошелёк: сид в localStorage этого браузера, ключ через WebCrypto. Ничего не защищает.
-import { createKeyPairFromPrivateKeyBytes, getAddressFromPublicKey, getTransactionDecoder, getTransactionEncoder, signTransaction } from '@solana/kit'
+import { createKeyPairFromPrivateKeyBytes, getAddressFromPublicKey, getTransactionDecoder, getTransactionEncoder, partiallySignTransaction } from '@solana/kit'
 import { fromHex, hex } from './registry'
 import type { Wallet } from './submit'
 
@@ -16,8 +16,9 @@ export async function demoWallet(storage: Pick<Storage, 'getItem' | 'setItem'>, 
   return {
     name,
     address: await getAddressFromPublicKey(keyPair.publicKey),
+    // Как настоящий кошелёк: только своя подпись, остальные подписанты добавят свои после
     async signTransaction(wire) {
-      const signed = await signTransaction([keyPair], getTransactionDecoder().decode(wire))
+      const signed = await partiallySignTransaction([keyPair], getTransactionDecoder().decode(wire))
       return new Uint8Array(getTransactionEncoder().encode(signed))
     },
   }
