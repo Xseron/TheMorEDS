@@ -9,7 +9,7 @@ export default defineNuxtConfig({
   nitro: { prerender: { routes: ['/', '/seal', '/transfer'], crawlLinks: false } },
   routeRules: { '/address/**': { ssr: false } },
 
-  app: { head: { htmlAttrs: { lang: 'en' }, link: [{ rel: 'icon', href: '/favicon.ico' }] } },
+  app: { head: { htmlAttrs: { lang: 'en' }, link: [{ rel: 'icon', type: 'image/svg+xml', href: '/img/mark.svg' }, { rel: 'icon', href: '/favicon.ico', sizes: '48x48' }] } },
   site: {
     url: process.env.NUXT_PUBLIC_SITE_URL || 'http://localhost:3000',
     name: 'MOR',

@@ -4,7 +4,7 @@
       <!-- На телефоне ссылки уходят во вторую строку, кошелёк остаётся справа от логотипа -->
       <div class="container-page flex flex-wrap items-center gap-x-10 gap-y-2 py-4 sm:h-[72px] sm:flex-nowrap sm:py-0">
         <NuxtLink to="/" class="flex items-center gap-2.5 no-underline hover:no-underline">
-          <img src="/img/mark.png" alt="" width="36" height="36">
+          <img src="/img/mark.svg" alt="" width="36" height="36">
           <span class="text-[20px] font-extrabold tracking-tight text-ink">MOR</span>
         </NuxtLink>
         <nav class="order-last flex w-full gap-7 sm:order-none sm:w-auto">

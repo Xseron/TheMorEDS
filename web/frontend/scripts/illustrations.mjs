@@ -7,6 +7,7 @@ import { optimize } from 'svgo'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const srcDir = join(root, 'assets-src', 'illustrations')
 const markSrc = join(root, 'assets-src', 'mark.png')
+const markSvgSrc = join(root, 'assets-src', 'mark.svg')
 const outDir = join(root, 'public', 'img')
 
 const LILAC = '#ede7f7'
@@ -211,7 +212,15 @@ function compress(svg) {
   }).data
 }
 
-// Знак: 128 px для шапки и favicon 16/32/48 из одного исходника, через Pillow
+// Только svgo: холст, фон и цвета остаются как в исходнике
+function publishAsIs(src, name) {
+  const raw = readFileSync(src, 'utf8')
+  const out = compress(raw)
+  writeFileSync(join(outDir, name), out)
+  return { before: Buffer.byteLength(raw), after: Buffer.byteLength(out) }
+}
+
+// Знак: svg публикуется как есть (цвета выбирает автор). Растровый знак 128 px и favicon 16/32/48 берутся из assets-src/mark.png через Pillow
 const MARK_PY = `
 import sys
 from PIL import Image
@@ -222,6 +231,10 @@ im.convert('RGBA').save(ico, sizes=[(16, 16), (32, 32), (48, 48)])
 `
 
 function buildMark() {
+  if (existsSync(markSvgSrc)) {
+    const { before, after } = publishAsIs(markSvgSrc, 'mark.svg')
+    console.log(`mark.svg ${kb(before)} -> ${kb(after)}  как в исходнике`)
+  }
   if (!existsSync(markSrc)) return console.warn('! assets-src/mark.png не найден, знак пропущен')
   const png = join(outDir, 'mark.png')
   const ico = join(root, 'public', 'favicon.ico')
@@ -247,14 +260,13 @@ for (const file of files) {
   try {
     const raw = readFileSync(join(srcDir, file), 'utf8')
     if (AS_IS.has(file)) {
-      const out = compress(raw)
-      writeFileSync(join(outDir, file), out)
-      totalBefore += Buffer.byteLength(raw)
-      totalAfter += Buffer.byteLength(out)
-      console.log(`${file.padEnd(18)} ${kb(Buffer.byteLength(raw))} -> ${kb(Buffer.byteLength(out))}  как в исходнике`)
+      const { before, after } = publishAsIs(join(srcDir, file), file)
+      totalBefore += before
+      totalAfter += after
+      console.log(`${file.padEnd(18)} ${kb(before)} -> ${kb(after)}  как в исходнике`)
       continue
     }
-    const clean =raw.replace(/<\?xml[^>]*\?>/, '').replace(/<metadata\b[\s\S]*?<\/metadata>/, '')
+    const clean = raw.replace(/<\?xml[^>]*\?>/, '').replace(/<metadata\b[\s\S]*?<\/metadata>/, '')
     const lifted = WHITE_DETAIL_TARGET[file] ? liftWhiteDetails(clean, WHITE_DETAIL_TARGET[file]) : { svg: clean, count: 0 }
     const bg = removeBackground(lifted.svg)
     if (bg.warning) console.warn(`! ${file}: ${bg.warning}`)
