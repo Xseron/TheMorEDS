@@ -15,6 +15,7 @@ test('seal the e2e wallet with the test attestor, then revoke', async ({ page })
     await expect(page.getByText('2. Attestation')).toBeVisible({ timeout: 60_000 })
   }
 
+  await page.getByRole('radio', { name: 'Test attestor (demo)' }).check()
   await page.getByLabel('Company name').fill('E2E Demo LLP')
   await page.getByLabel('BIN').fill('123456789012')
   await page.getByRole('button', { name: 'Sign with the test attestor' }).click()

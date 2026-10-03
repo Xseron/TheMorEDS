@@ -52,6 +52,9 @@ describe('test attestor', () => {
     const forged = { ...a, signature: new Uint8Array(a.signature) }
     forged.signature[0] ^= 1
     await expect(verifyAttestation(DEVNET_IDS, forged, DEMO.c, ATTESTOR, NOW)).rejects.toThrow(/does not verify/)
+    const salted = { ...a, salt: new Uint8Array(a.salt) }
+    salted.salt[0] ^= 1
+    await expect(verifyAttestation(DEVNET_IDS, salted, DEMO.c, ATTESTOR, NOW)).rejects.toThrow(/salt/)
   })
 
   it('round-trips through the attestor JSON shape', async () => {

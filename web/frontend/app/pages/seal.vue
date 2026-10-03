@@ -21,13 +21,27 @@
 
         <li v-if="wallet && existing === null && !done">
           <h2 class="mb-2 text-[22px]">2. Attestation</h2>
-          <fieldset class="space-y-3 border border-rule p-4">
+          <div class="mb-3 flex flex-wrap gap-5">
+            <label class="flex items-center gap-2"><input v-model="mode" type="radio" value="nca"> NCA of Kazakhstan (NCALayer)</label>
+            <label class="flex items-center gap-2"><input v-model="mode" type="radio" value="test"> Test attestor (demo)</label>
+          </div>
+
+          <fieldset v-if="mode === 'nca'" class="space-y-3 border border-rule p-4">
+            <legend class="px-1">NCA of Kazakhstan</legend>
+            <p class="text-[15px]">This is the request you sign with your company's NCA key. The attestor reads the company name and BIN from your certificate.</p>
+            <pre class="overflow-x-auto border border-rule bg-seal-tint p-3 font-mono text-[13px]">{{ request.text }}</pre>
+            <button class="btn btn-primary" :disabled="busy" @click="attestNca">Sign with NCALayer</button>
+            <span v-if="busy" class="note ml-3">{{ stage }}</span>
+          </fieldset>
+
+          <fieldset v-else class="space-y-3 border border-rule p-4">
             <legend class="px-1">Test attestor (demo)</legend>
             <p class="border border-refusal p-2 text-[15px] text-refusal">The attestor key is public. Anyone can mint such seals. Demo only.</p>
             <label class="block">Company name<input v-model="name" class="field mt-1" maxlength="128"></label>
             <label class="block">BIN<input v-model="bin" class="field mt-1" inputmode="numeric" maxlength="12"></label>
             <button class="btn btn-primary" :disabled="busy" @click="attestTest">Sign with the test attestor</button>
           </fieldset>
+
           <p v-if="attestation" class="mt-3 border border-seal p-3">
             Attested by <AddressText :address="attestation.trustService" />: <b>{{ attestation.name }}</b><span v-if="attestation.bin">, BIN {{ attestation.bin }}</span>.
             The BIN stays in this browser and does not go on-chain.
@@ -58,8 +72,9 @@
 </template>
 
 <script setup lang="ts">
-import { attestWithTestKey, registerInstructions, verifyAttestation, type Attestation } from '~/utils/attestation'
+import { attestWithTestKey, postAttest, registerInstructions, requestText, verifyAttestation, type Attestation } from '~/utils/attestation'
 import { describeError } from '~/utils/errors'
+import { signWithNcaLayer } from '~/utils/ncalayer'
 import { hex, sealPda } from '~/utils/registry'
 import type { Lookup } from '~/composables/useRegistry'
 
@@ -81,6 +96,13 @@ const done = ref<{ sig: string; salt: string; name: string; expiresAt: bigint } 
 const saltCopied = ref(false)
 const now = () => BigInt(Math.floor(Date.now() / 1000))
 const date = (s: bigint) => new Date(Number(s) * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+const mode = ref<'nca' | 'test'>('nca')
+const stage = ref('')
+// Текст запроса фиксируется при показе: пользователь подписывает ровно то, что видит
+const request = ref({ text: '', expires: 0n, deadline: 0n })
+watch([mode, () => wallet.value?.address], () => {
+  if (mode.value === 'nca' && wallet.value) request.value = requestText(ids, wallet.value.address, now())
+}, { immediate: true })
 
 async function check() {
   existing.value = undefined
@@ -114,6 +136,22 @@ async function attestTest() {
     error.value = describeError(e, { attestorUrl })
   } finally {
     busy.value = false
+  }
+}
+
+async function attestNca() {
+  error.value = ''
+  busy.value = true
+  try {
+    stage.value = 'Waiting for NCALayer…'
+    const cms = await signWithNcaLayer(request.value.text)
+    stage.value = 'Asking the attestor…'
+    attestation.value = await postAttest(attestorUrl, cms)
+  } catch (e) {
+    error.value = describeError(e, { attestorUrl })
+  } finally {
+    busy.value = false
+    stage.value = ''
   }
 }
 

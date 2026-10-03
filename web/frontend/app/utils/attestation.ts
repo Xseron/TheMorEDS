@@ -4,6 +4,7 @@ import {
   createKeyPairFromBytes, getAddressFromPublicKey, getBase64Decoder, getBase64Encoder, getPublicKeyFromAddress, signBytes, verifySignature,
   type Address, type Instruction, type SignatureBytes,
 } from '@solana/kit'
+import { AttestorError } from './errors'
 import {
   AddressKind, TrustLevel, addressBytes, ed25519Instruction, fromHex, hex, registerSealAttestedInstruction, sealMessage, sha256, trustPda, utf8,
   type Ids,
@@ -84,6 +85,14 @@ export function encodeAttestResponse(a: Attestation): AttestResponse {
   }
 }
 
+export async function postAttest(attestorUrl: string, cms: string, fetchFn: typeof fetch = fetch): Promise<Attestation> {
+  const res = await fetchFn(`${attestorUrl}/v1/attest`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cms }) })
+  let body: Partial<AttestResponse> & { error?: string; message?: string } = {}
+  try { body = await res.json() } catch { /* не JSON, ниже станет ошибкой по статусу */ }
+  if (!res.ok || !body.message || !body.signature) throw new AttestorError(body.error ?? `http_${res.status}`, res.status, body.message ?? '')
+  return parseAttestResponse(body as AttestResponse)
+}
+
 const same = (x: Uint8Array, y: Uint8Array) => x.length === y.length && x.every((b, i) => b === y[i])
 
 // Всё, что можно проверить до окна кошелька: испорченный ответ ловится здесь, а не падением в сети
@@ -91,6 +100,7 @@ export async function verifyAttestation(ids: Ids, a: Attestation, owner: Address
   if (a.attestor !== expectedAttestor) throw new Error('The attestation is signed by an unknown attestor')
   if (now > a.signDeadline) throw new Error('The attestation has expired. Sign again')
   if (!same(sealMessage(fields(ids, owner, a)), a.message)) throw new Error('The attestation is not for this wallet and registry')
+  if (a.bin && !same(await sha256(a.salt, utf8('KZ'), utf8(a.bin)), a.identifierHash)) throw new Error('The salt does not match the identifier hash')
   if (a.trustService !== await trustPda(ids, await sha256(addressBytes(a.attestor)))) throw new Error('The trust service does not match the attestor key')
   const ok = await verifySignature(await getPublicKeyFromAddress(a.attestor), a.signature as SignatureBytes, a.message)
   if (!ok) throw new Error('The attestor signature does not verify')
