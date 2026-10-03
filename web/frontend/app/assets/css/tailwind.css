@@ -20,7 +20,7 @@
   .container-page { @apply mx-auto max-w-page px-5; }
   .btn { @apply inline-flex items-center justify-center rounded-control border-[1.5px] border-violet bg-paper px-5 py-3 text-[15px] font-bold leading-none text-violet no-underline transition-colors hover:bg-lilac-soft hover:no-underline disabled:cursor-wait disabled:opacity-60; }
   .btn-primary { @apply border-violet bg-violet text-paper hover:border-violet-deep hover:bg-violet-deep; }
-  .field { @apply w-full rounded-control border border-line bg-paper px-4 py-3 text-[16px] font-medium text-ink placeholder:text-muted focus:border-violet focus:outline-none focus:ring-1 focus:ring-violet; }
+  .field { @apply w-full rounded-control border border-field-border bg-paper px-4 py-3 text-[16px] font-medium text-ink placeholder:text-muted focus:border-violet focus:outline-none focus:ring-1 focus:ring-violet; }
   .label { @apply text-[13px] font-bold uppercase tracking-[0.08em] text-muted; }
   .eyebrow { @apply text-[13px] font-bold uppercase tracking-[0.12em] text-violet; }
   .card { @apply rounded-card bg-lilac p-6 md:p-8; }

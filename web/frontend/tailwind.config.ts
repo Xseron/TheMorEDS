@@ -8,6 +8,8 @@ export default <Partial<Config>>{
         ink: '#292B3C',
         muted: '#5B6070',
         line: '#E3E0EC',
+        // Рамка поля ввода: 3.22:1 на белом (WCAG 1.4.11), line для этого слишком бледный
+        'field-border': '#8A8FA0',
         lilac: '#EDE7F7',
         'lilac-soft': '#F4F0FA',
         violet: '#6D28D9',
