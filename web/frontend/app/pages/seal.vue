@@ -13,6 +13,7 @@
             <WalletButton v-if="!wallet" class="mt-4" />
             <template v-else>
               <p class="mt-3">Connected: <AddressText :address="wallet.address" /> ({{ wallet.name }})</p>
+              <p v-if="stateOf(wallet.address).status === 'funding'" class="note mt-2">Funding this wallet with devnet SOL and demo tokens…</p>
               <p v-if="existing === undefined && !error" class="note mt-2">Checking the registry…</p>
               <div v-else-if="existing" class="mt-5 rounded-control bg-lilac-soft p-4">
                 <p>This wallet is already sealed as <b>{{ existing.seal.name }}</b>. <NuxtLink :to="`/address/${wallet.address}`">Open the extract</NuxtLink></p>
@@ -95,13 +96,14 @@ import { signWithNcaLayer } from '~/utils/ncalayer'
 import { hex, sealPda } from '~/utils/registry'
 import type { Lookup } from '~/composables/useRegistry'
 
-const description = 'Register an organization seal for your Solana wallet: sign with an NCA of Kazakhstan key through NCALayer, or try the test attestor on devnet.'
+const description = 'Register an organization seal for your Solana wallet: sign with an NCA of Kazakhstan key through NCALayer, or try the test attestor on devnet'
 useSeoMeta({ title: 'Seal your wallet with an electronic signature', description })
 defineOgImageComponent('Default', { title: 'Seal your wallet with an electronic signature', description })
 
 const { ids, send, accountData, txLink, attestorUrl, attestorAddress, testAttestorKey } = useSolana()
 const { wallet } = useWallet()
 const { lookup, invalidate } = useRegistry()
+const { stateOf } = useDrip()
 
 type Sealed = Extract<Lookup, { status: 'valid' | 'expired' }>
 const existing = ref<Sealed | null | undefined>(undefined)
