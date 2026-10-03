@@ -1,12 +1,13 @@
-import { address, createSolanaRpc, getBase64Encoder, type Address, type Instruction } from '@solana/kit'
+import { address, createDefaultRpcTransport, createSolanaRpcFromTransport, getBase64Encoder, type Address, type Instruction } from '@solana/kit'
 import { fromHex, type Ids } from '~/utils/registry'
+import { withRetryOn429 } from '~/utils/retryTransport'
 import { submit } from '~/utils/submit'
 
-let rpcCache: { url: string; rpc: ReturnType<typeof createSolanaRpc> } | null = null
+let rpcCache: { url: string; rpc: ReturnType<typeof createSolanaRpcFromTransport> } | null = null
 
 export function useSolana() {
   const cfg = useRuntimeConfig().public
-  if (!rpcCache || rpcCache.url !== cfg.rpcUrl) rpcCache = { url: cfg.rpcUrl, rpc: createSolanaRpc(cfg.rpcUrl) }
+  if (!rpcCache || rpcCache.url !== cfg.rpcUrl) rpcCache = { url: cfg.rpcUrl, rpc: createSolanaRpcFromTransport(withRetryOn429(createDefaultRpcTransport({ url: cfg.rpcUrl }))) }
   const rpc = rpcCache.rpc
   const ids: Ids = { registry: address(cfg.registry), hook: address(cfg.hook), mint: address(cfg.mint) }
   const { wallet } = useWallet()

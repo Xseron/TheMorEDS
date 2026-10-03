@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
-import { withE2eWallet } from './helpers'
+import { createHash } from 'node:crypto'
+import { E2E_SEED, withE2eWallet } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -20,6 +21,9 @@ test('opens the reference bond and switches to an unknown mint', async ({ page }
 test('a full lifecycle with a one-minute period', async ({ page }) => {
   test.setTimeout(900_000)
   await withE2eWallet(page)
+  // Одни и те же демо-инвесторы в каждом прогоне: после первого они уже с SOL и печатью
+  const investorSeeds = [1, 2, 3].map(i => createHash('sha256').update(`${E2E_SEED}:kase-investor-${i}`).digest('hex'))
+  await page.addInitScript((seeds: string[]) => seeds.forEach((s, i) => localStorage.setItem(`kase-investor-${i + 1}`, s)), investorSeeds)
   await page.goto('/kase')
   await expect(page.getByText('Issuer:')).toBeVisible({ timeout: 30_000 })
   const seal = page.getByRole('button', { name: 'Seal with the test attestor' })
