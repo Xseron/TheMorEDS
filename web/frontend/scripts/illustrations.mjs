@@ -13,8 +13,15 @@ const LILAC = '#ede7f7'
 const VIOLET_HUE = 263
 // верхняя граница светлого серого: #f8f8f7 (светлота 0.9706) — тот же серый, что был фоном government.svg
 const GREY_MAX_L = 0.975
-// в government.svg светлые серые это поверхности (стена, лист, фронтон), а не пятно: там они белые
-const GREY_TARGET = { 'government.svg': '#ffffff' }
+// светлые серые здесь поверхности (лист, стойка), а не пятно: они остаются белыми
+const GREY_TARGET = {
+  'step-sign.svg': '#ffffff',
+  'step-verify.svg': '#ffffff',
+}
+// эти файлы только сжимаем: фон, цвета и серые остаются как в исходнике
+const AS_IS = new Set(['government.svg'])
+// белые детали поверх этих серых (строки текста, подпись, прорези) красим в сиреневый, иначе на белом пропадут
+const WHITE_DETAIL_TARGET = { 'step-sign.svg': LILAC, 'step-verify.svg': LILAC }
 const EDGE = 0.01 // допуск касания края холста, доля от размера
 
 const kb = n => (n / 1024).toFixed(1).padStart(6) + ' KB'
@@ -114,6 +121,29 @@ function shapeBox(tag) {
     return { x0, y0, x1: x0 + Number(attr(tag, 'width')), y1: y0 + Number(attr(tag, 'height')) }
   }
   return null
+}
+
+// Белый элемент, целиком лежащий в рамке более раннего серого, считаем деталью на серой поверхности
+function liftWhiteDetails(svg, target) {
+  const greys = []
+  let count = 0
+  const out = svg.replace(ELEMENT, el => {
+    if (el.startsWith('<defs')) return el
+    const fill = attr(el, 'fill')
+    const rgb = parseColor(fill)
+    const box = rgb && shapeBox(el)
+    if (!box) return el
+    if (classify(fill) === 'grey') {
+      greys.push(box)
+      return el
+    }
+    const white = toHsl(rgb).l >= 0.99 && chroma(rgb) < 0.03
+    const inside = g => box.x0 >= g.x0 && box.y0 >= g.y0 && box.x1 <= g.x1 && box.y1 <= g.y1
+    if (!white || !greys.some(inside)) return el
+    count++
+    return el.replace(/fill="[^"]*"/, `fill="${target}"`)
+  })
+  return { svg: out, count }
 }
 
 // Recraft кладёт слои друг на друга: внизу сплошной слой цвета контура, поверх куски
@@ -216,8 +246,17 @@ const files = readdirSync(srcDir).filter(f => f.endsWith('.svg')).sort()
 for (const file of files) {
   try {
     const raw = readFileSync(join(srcDir, file), 'utf8')
-    const clean = raw.replace(/<\?xml[^>]*\?>/, '').replace(/<metadata\b[\s\S]*?<\/metadata>/, '')
-    const bg = removeBackground(clean)
+    if (AS_IS.has(file)) {
+      const out = compress(raw)
+      writeFileSync(join(outDir, file), out)
+      totalBefore += Buffer.byteLength(raw)
+      totalAfter += Buffer.byteLength(out)
+      console.log(`${file.padEnd(18)} ${kb(Buffer.byteLength(raw))} -> ${kb(Buffer.byteLength(out))}  как в исходнике`)
+      continue
+    }
+    const clean =raw.replace(/<\?xml[^>]*\?>/, '').replace(/<metadata\b[\s\S]*?<\/metadata>/, '')
+    const lifted = WHITE_DETAIL_TARGET[file] ? liftWhiteDetails(clean, WHITE_DETAIL_TARGET[file]) : { svg: clean, count: 0 }
+    const bg = removeBackground(lifted.svg)
     if (bg.warning) console.warn(`! ${file}: ${bg.warning}`)
     const { svg, stats } = recolor(bg.svg, GREY_TARGET[file])
     const out = compress(svg)
@@ -226,7 +265,7 @@ for (const file of files) {
     const after = Buffer.byteLength(out)
     totalBefore += before
     totalAfter += after
-    console.log(`${file.padEnd(18)} ${kb(before)} -> ${kb(after)}  фон: ${bg.removed} (масок ${bg.masked})  синий: ${stats.blue}  серый: ${stats.grey}`)
+    console.log(`${file.padEnd(18)} ${kb(before)} -> ${kb(after)}  фон: ${bg.removed} (масок ${bg.masked})  синий: ${stats.blue}  серый: ${stats.grey}${lifted.count ? `  белых деталей: ${lifted.count}` : ''}`)
   } catch (e) {
     failed = true
     console.error(`! ${file}: ${e.message}`)
