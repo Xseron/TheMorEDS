@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 test('landing shows the live extract of B, the ledger toggle works, the form navigates, no horizontal scroll at 400px', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Who stands behind this Solana address?')
-  // Название ещё есть в ссылке «Try:» и в артефактах шагов, поэтому ждём именно заголовок выписки
+  // Название ещё есть в ссылке "Try:" и в артефактах шагов, поэтому ждём именно заголовок выписки
   await expect(page.getByRole('heading', { name: 'ТОО «Ромашка»' })).toBeVisible({ timeout: 60_000 })
   await expect(page.getByTestId('seal-status').first()).toHaveText('Valid seal')
 

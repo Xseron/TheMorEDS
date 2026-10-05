@@ -61,7 +61,6 @@ export function useWallet() {
     localStorage.removeItem(LAST_KEY)
   }
 
-  // При загрузке: список кошельков, подписка на поздние расширения, тихое переподключение последнего
   async function autoConnect() {
     refresh()
     if (!listening) {

@@ -9,15 +9,14 @@ use crate::{
     state::{AddressKind, Certificate, Seal, SubjectType, TrustKind, TrustLevel, TrustService},
 };
 
-/// Печать eIDAS: ключ сертификата организации подписывает сообщение (прекомпайл secp256r1
-/// прямо перед этой инструкцией), контролёр адреса подписывает транзакцию и платит аренду.
+/// Сообщение подписывает ключ сертификата организации, а транзакцию контролёр адреса
 #[derive(Accounts)]
 pub struct RegisterSealP256<'info> {
     #[account(mut)]
     pub controller: Signer<'info>,
-    /// CHECK: запечатываемый адрес; контроль проверяет controller::controls
+    /// CHECK: проверяется в controller::controls
     pub address: UncheckedAccount<'info>,
-    /// CHECK: ProgramData для kind = Program; проверяется в controller::controls
+    /// CHECK: ProgramData при kind = Program, проверяется в controller::controls
     pub program_data: Option<UncheckedAccount<'info>>,
     pub trust_service: Account<'info, TrustService>,
     #[account(has_one = trust_service @ MorError::IssuerMismatch)]
@@ -30,7 +29,7 @@ pub struct RegisterSealP256<'info> {
         bump
     )]
     pub seal: Account<'info, Seal>,
-    /// CHECK: адрес закреплён константой Instructions sysvar
+    /// CHECK: адрес закреплён на Instructions sysvar
     #[account(address = solana_instructions_sysvar::ID)]
     pub instructions: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,

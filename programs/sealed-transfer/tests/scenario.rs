@@ -1,5 +1,3 @@
-//! Transfer hook в LiteSVM: Token-2022 вызывает sealed-transfer на каждый transfer_checked.
-
 use {
     anchor_lang::{
         prelude::{Clock, Pubkey},
@@ -39,7 +37,7 @@ fn program_bytes() -> Vec<u8> {
 }
 
 fn send(svm: &mut LiteSVM, payer: &Keypair, signers: &[&Keypair], ixs: &[Instruction]) -> TxResult {
-    // Свежий blockhash: иначе LiteSVM отклонит повтор той же транзакции как AlreadyProcessed.
+    // Свежий blockhash: иначе LiteSVM отклонит повтор той же транзакции как AlreadyProcessed
     svm.expire_blockhash();
     let msg = Message::new_with_blockhash(ixs, Some(&payer.pubkey()), &svm.latest_blockhash());
     let mut all = vec![payer];
@@ -52,7 +50,7 @@ fn ok(res: TxResult) -> TransactionMetadata {
     res.unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs))
 }
 
-/// Custom-код ошибки перевода (инструкция 0): ошибка хука доходит через CPI как есть.
+/// Ошибка хука доходит через CPI до инструкции 0 как есть
 fn custom_code(res: &TxResult) -> Option<u32> {
     match res {
         Err(e) => match &e.err {
@@ -74,7 +72,7 @@ struct Env {
 }
 
 impl Env {
-    /// Минт Token-2022 с TransferHook → sealed-transfer и политикой `min_trust_level`.
+    /// Минт с TransferHook на sealed-transfer
     fn new(min_trust_level: u8) -> Env {
         let mut svm = LiteSVM::new();
         svm.add_program(sealed_transfer::ID, &program_bytes()).unwrap();
@@ -127,7 +125,7 @@ impl Env {
         self.svm.set_sysvar(&Clock { unix_timestamp, ..Clock::default() });
     }
 
-    /// Токен-аккаунт владельца `owner` с расширением TransferHookAccount.
+    /// TransferHookAccount нужен хуку ради флага transferring
     fn token_account(&mut self, owner: &Pubkey) -> Pubkey {
         let account = Keypair::new();
         let space =
@@ -148,8 +146,7 @@ impl Env {
         ok(send(&mut self.svm, &issuer, &[], &[ix]));
     }
 
-    /// transfer_checked плюс аккаунты хука: реестр, политика, печать владельца получателя,
-    /// сама программа хука и список мета-аккаунтов. Token-2022 находит их по ключам.
+    /// Аккаунты хука идут следом, Token-2022 находит их по ключам
     fn transfer(&mut self, owner: &Keypair, from: &Pubkey, to: &Pubkey, to_owner: &Pubkey, amount: u64) -> TxResult {
         let mut ix =
             token_ix::transfer_checked(&TOKEN_2022_ID, from, &self.mint, to, &owner.pubkey(), &[], amount, DECIMALS)
@@ -163,14 +160,14 @@ impl Env {
 
 const NOW: i64 = 1_800_000_000;
 
-/// Печать владельца `owner` — аккаунт реестра в его раскладке (регистрацию проверяют тесты реестра).
+/// Пишем аккаунт печати напрямую: регистрацию проверяют тесты реестра
 fn put_seal(env: &mut Env, owner: &Pubkey, level: TrustLevel, expires_at: i64) {
     let (pda, data) = seal_account(owner, level, expires_at);
     let account = Account { lamports: 10_000_000, data, owner: MOR_REGISTRY_ID, executable: false, rent_epoch: 0 };
     env.svm.set_account(pda, account).unwrap();
 }
 
-/// Отзыв закрывает аккаунт печати: ни лампортов, ни данных.
+/// Отзыв закрывает аккаунт печати: ни лампортов, ни данных
 fn remove_seal(env: &mut Env, owner: &Pubkey) {
     let account = Account { lamports: 0, data: vec![], owner: system_program::ID, executable: false, rent_epoch: 0 };
     env.svm.set_account(seal_pda(owner), account).unwrap();

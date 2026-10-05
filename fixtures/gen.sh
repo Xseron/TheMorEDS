@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
-# Тестовый УЦ «Mör Test QTSP» на P-256 и набор сертификатов для тестов.
-# Запуск из WSL: bash fixtures/gen.sh   (нужен OpenSSL 3).
-# Ключи лежат в fixtures/keys/ (только для тестов): создаются, если их нет, иначе
-# переиспользуются. Сертификаты выпускаются заново из этих ключей при каждом запуске.
+# Тестовый УЦ на P-256 и сертификаты для тестов. Из WSL: bash fixtures/gen.sh, нужен OpenSSL 3
+# Ключи в fixtures/keys/ (только тестовые) создаются один раз, сертификаты перевыпускаются каждый запуск
 set -euo pipefail
 cd "$(dirname "$0")"
 KEYS="$PWD/keys"
 mkdir -p "$KEYS"
 rm -rf work && mkdir work && cd work
 
-# Minimal openssl config so `openssl req -x509` does not also pull in the
-# default config's [v3_ca] extensions (which would duplicate/conflict with
-# our -addext flags on OpenSSL 3.0.13).
+# Свой пустой конфиг: с дефолтным req -x509 добавляет [v3_ca], и расширения
+# дублируются с нашими -addext (OpenSSL 3.0.13)
 cat > minimal.cnf <<'EOF'
 [req]
 distinguished_name = req_distinguished_name

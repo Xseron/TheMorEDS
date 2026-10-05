@@ -1,3 +1,2 @@
-// Package testpki — тестовая иерархия НУЦ РК из pkisdk/ (УЦ, CRL, ключи юрлица) и подпись
-// через KalkanCrypt для тестов с тегом kalkan. Без тега пакет пуст.
+// Package testpki - тестовая PKI НУЦ из pkisdk/ для тестов с тегом kalkan, без тега пакет пуст
 package testpki

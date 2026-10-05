@@ -1,5 +1,4 @@
-// Аттестация: подписанное аттестатором сообщение печати и поля к нему. Два источника: Go-аттестатор
-// через NCALayer и тестовый ключ в браузере. Дальше путь общий.
+// Два источника аттестации: Go-аттестатор через NCALayer и тестовый ключ в браузере, дальше путь общий
 import {
   createKeyPairFromBytes, getAddressFromPublicKey, getBase64Decoder, getBase64Encoder, getPublicKeyFromAddress, signBytes, verifySignature,
   type Address, type Instruction, type SignatureBytes,
@@ -23,7 +22,7 @@ export interface Attestation {
   signDeadline: bigint
 }
 
-// Ответ POST /v1/attest, как в спеке аттестатора
+// Ответ POST /v1/attest
 export type AttestResponse = {
   message: string; signature: string; attestor: string; trustService: string
   name: string; bin: string; salt: string; identifierHash: string; expiresAt: number; signDeadline: number

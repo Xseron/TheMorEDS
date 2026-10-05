@@ -1,11 +1,11 @@
-//! Проверка печати Mör из любой программы Solana: кто стоит за адресом и с каким доверием.
+//! Проверка печати Mör из любой программы Solana
 //!
 //! ```ignore
 //! let seal = mor_verify_seal::verify_seal(&seal_account, &owner, TrustLevel::Attestor)?;
 //! ```
 //!
-//! Печать — аккаунт реестра Mör по адресу PDA `["seal", owner]`. Крейт не зависит от Anchor и от
-//! кода реестра: раскладка аккаунта зафиксирована здесь, совпадение с реестром проверяет его тест.
+//! Печать лежит по PDA `["seal", owner]`. Anchor и код реестра не нужны: раскладка продублирована
+//! здесь, а что она совпадает с реестром, проверяет его тест
 
 use solana_account_info::AccountInfo;
 use solana_clock::Clock;
@@ -15,14 +15,10 @@ use solana_sysvar::Sysvar;
 
 pub const MOR_REGISTRY_ID: Pubkey = pubkey!("CqbwC3DF4APG6cjRneir1UPuBbh49ttBrKasfc5QP1aP");
 pub const SEAL_SEED: &[u8] = b"seal";
-/// Дискриминатор Anchor: `sha256("account:Seal")[..8]`.
 pub const SEAL_DISCRIMINATOR: [u8; 8] = [162, 149, 250, 10, 100, 125, 36, 168];
-/// Все поля до `name` плюс длина строки.
 pub const SEAL_MIN_LEN: usize = 194;
-/// Коды ошибок крейта в `ProgramError::Custom`: 9100 + номер варианта `SealError`.
 pub const ERROR_BASE: u32 = 9100;
 
-/// Смещения полей в данных аккаунта (после 8 байт дискриминатора), спек недели 2.
 mod offsets {
     pub const ADDRESS: usize = 8;
     pub const ADDRESS_KIND: usize = 40;
@@ -38,13 +34,10 @@ mod offsets {
     pub const BUMP: usize = 189;
 }
 
-/// Уровень доверия; больше — сильнее.
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TrustLevel {
-    /// Подпись проверил аттестатор вне сети (НУЦ РК).
     Attestor = 0,
-    /// Подпись и сертификат проверены в сети (eIDAS).
     Trustless = 1,
 }
 
@@ -79,9 +72,9 @@ impl AddressKind {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SealError {
-    /// Аккаунт не принадлежит реестру: печати нет или она отозвана.
+    /// Владелец аккаунта не реестр: печати нет или её отозвали
     NotSealed = 0,
-    /// Аккаунт реестра, но не печать этого адреса.
+    /// Аккаунт реестра, но не печать этого адреса
     WrongAccount = 1,
     Expired = 2,
     TrustTooLow = 3,
@@ -93,7 +86,7 @@ impl From<SealError> for ProgramError {
     }
 }
 
-/// Поля печати, нужные программе-потребителю. Название организации читает страница через RPC.
+/// Названия организации тут нет, его страница читает через RPC
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Seal {
     pub address: Pubkey,
@@ -101,23 +94,23 @@ pub struct Seal {
     pub controller: Pubkey,
     pub trust_level: TrustLevel,
     pub jurisdiction: [u8; 2],
-    /// 0 — юридическое лицо.
+    /// 0 = юрлицо
     pub subject_type: u8,
     pub identifier_hash: [u8; 32],
     pub trust_service: Pubkey,
-    /// `None` для печатей аттестатора.
+    /// `None` для печатей аттестатора
     pub certificate: Option<Pubkey>,
     pub expires_at: i64,
     pub created_at: i64,
 }
 
-/// Печать адреса `owner` действует сейчас и её уровень не ниже `min`.
+/// Печать `owner` должна действовать сейчас и быть не ниже `min`
 pub fn verify_seal(seal: &AccountInfo, owner: &Pubkey, min: TrustLevel) -> Result<Seal, ProgramError> {
     let now = Clock::get()?.unix_timestamp;
     Ok(verify_seal_at(seal, owner, min, now)?)
 }
 
-/// То же с явным временем (для тестов и офчейн-проверок).
+/// То же с явным временем, для тестов и офчейн-проверок
 pub fn verify_seal_at(seal: &AccountInfo, owner: &Pubkey, min: TrustLevel, now: i64) -> Result<Seal, SealError> {
     if seal.owner != &MOR_REGISTRY_ID {
         return Err(SealError::NotSealed);
@@ -162,12 +155,11 @@ fn parse(d: &[u8]) -> Option<(Seal, u8)> {
     Some((seal, d[BUMP]))
 }
 
-/// Данные аккаунта печати в раскладке реестра — для тестов программ-потребителей.
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils {
     use super::{offsets::*, *};
 
-    /// Печать кошелька `owner` (юрлицо, EE, без названия); возвращает (PDA, данные аккаунта).
+    /// Печать кошелька, название пустое
     pub fn seal_account(owner: &Pubkey, trust_level: TrustLevel, expires_at: i64) -> (Pubkey, Vec<u8>) {
         let (pda, bump) = Pubkey::find_program_address(&[SEAL_SEED, owner.as_ref()], &MOR_REGISTRY_ID);
         let mut d = vec![0u8; SEAL_MIN_LEN];

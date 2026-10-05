@@ -26,10 +26,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// Спайк: KalkanCrypt подписывает ключом НУЦ (ГОСТ 2015), проверяет присоединённую CMS
-// с цепочкой до тестового УЦ НУЦ 2022, отдаёт сертификат подписанта с полями юрлица
-// и по CRL отличает действующий сертификат от отозванного. Испорченная подпись, подмена
-// подписанта и CMS с двумя подписантами отклоняются как ErrBadSignature.
 func TestSignVerifyCRL(t *testing.T) {
 	v, err := kalkan.NewVerifier(testpki.CAs(), testpki.CRLs())
 	if err != nil {
@@ -66,18 +62,16 @@ func TestSignVerifyCRL(t *testing.T) {
 		t.Fatalf("revoked certificate: got %v (%s), want ErrRevoked", err, kalkan.Message(err))
 	}
 
-	// Подделки собираются из настоящих CMS разбором ASN.1, без криптографии.
+	// подделки собираем из настоящих CMS на уровне ASN.1, без криптографии
 	victim := parseCMS(t, cms)
 	signer := testpki.P12(t, "Сотрудник с правом подписи", "valid")
 	other := parseCMS(t, testpki.Sign(t, signer, []byte("данные, которые первый руководитель не подписывал")))
 	second := parseCMS(t, testpki.Sign(t, signer, data))
-	// «Двойник» первого руководителя: RSA-сертификат с тем же издателем, серийным номером
-	// и SubjectKeyId, подписанный одноразовым ключом. Настоящая подпись первого руководителя
-	// с набором сертификатов [жертва, двойник] или [двойник, жертва] должна отвергаться
-	// в любом порядке: Verify опирается на то, что KC_GetCertFromCMS отдаёт тот же
-	// сертификат, который проверил VerifyData. KalkanCrypt берёт первый подходящий по sid,
-	// поэтому [жертва, двойник] — это подпись настоящего сертификата, и Verify обязан
-	// вернуть именно его (двойник лишний в наборе и не используется).
+	// twin: RSA-сертификат с тем же издателем, серийником и SubjectKeyId, что у первого
+	// руководителя, но подписанный одноразовым ключом. Verify рассчитывает, что KC_GetCertFromCMS
+	// отдаёт тот же сертификат, что проверил VerifyData. KalkanCrypt берёт первый подходящий
+	// по sid, так что [двойник, жертва] должен отвергаться, а при [жертва, двойник] Verify
+	// может вернуть только настоящий сертификат
 	vc, err := x509.ParseCertificate(victim.certs(t)[0])
 	if err != nil {
 		t.Fatal(err)
@@ -93,12 +87,11 @@ func TestSignVerifyCRL(t *testing.T) {
 	twin, _ := testpki.ForgedCert(t, issuerCert, vc.SerialNumber, vc.Subject, vc.SubjectKeyId)
 	forged := []struct{ name, cms string }{
 		{"twin before victim", victim.build(t, append([][]byte{twin}, victim.certs(t)...), victim.signers(t))},
-		// Один байт значения подписи изменён; содержимое и его хэш в подписанных атрибутах целы.
+		// хэш в подписанных атрибутах цел, ловит только проверка значения подписи
 		{"corrupted signature", victim.build(t, victim.certs(t), [][]byte{corruptSignature(t, victim.signers(t)[0])})},
-		// Другой сотрудник подписал свои данные своим ключом, а sid и набор сертификатов
-		// указывают на первого руководителя.
+		// подпись другого сотрудника, а sid и сертификаты от первого руководителя
 		{"signer impersonation", other.build(t, victim.certs(t), [][]byte{withSid(t, other.signers(t)[0], victim.signers(t)[0])})},
-		// Две верные подписи одних данных: аттестатор принимает только одного подписанта.
+		// обе подписи верные
 		{"two signers", victim.build(t, append(victim.certs(t), second.certs(t)...), append(victim.signers(t), second.signers(t)...))},
 	}
 	after, afterErr := func() ([]byte, error) {
@@ -117,8 +110,7 @@ func TestSignVerifyCRL(t *testing.T) {
 	}
 }
 
-// signedData — присоединённая CMS, разобранная до полей SignedData (RFC 5652): contentType
-// ContentInfo и поля SignedData по порядку; сертификаты — поле [0], SignerInfos — последнее.
+// сертификаты в поле [0], SignerInfos последнее (RFC 5652)
 type signedData struct {
 	contentType []byte
 	fields      []asn1.RawValue
@@ -130,7 +122,7 @@ func parseCMS(t *testing.T, cmsB64 string) signedData {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// SignData KalkanCrypt кодирует в base64 и нулевой байт после DER — он отбрасывается.
+	// KalkanCrypt кладёт в base64 ещё и нулевой байт после DER, хвост отбрасываем
 	var top asn1.RawValue
 	if _, err := asn1.Unmarshal(der, &top); err != nil {
 		t.Fatal(err)
@@ -158,7 +150,6 @@ func (sd signedData) signers(t *testing.T) [][]byte {
 	return fullBytes(elements(t, sd.fields[len(sd.fields)-1].FullBytes))
 }
 
-// build — та же CMS (base64) с другими сертификатами и SignerInfos.
 func (sd signedData) build(t *testing.T, certs, signers [][]byte) string {
 	t.Helper()
 	ci := sd.certIndex(t)
@@ -177,7 +168,7 @@ func (sd signedData) build(t *testing.T, certs, signers [][]byte) string {
 	return base64.StdEncoding.EncodeToString(constructed(t, asn1.ClassUniversal, asn1.TagSequence, sd.contentType, content))
 }
 
-// corruptSignature меняет один байт в значении подписи SignerInfo (последняя OCTET STRING).
+// значение подписи - последняя OCTET STRING в SignerInfo
 func corruptSignature(t *testing.T, si []byte) []byte {
 	t.Helper()
 	f := elements(t, si)
@@ -197,7 +188,7 @@ func corruptSignature(t *testing.T, si []byte) []byte {
 	return nil
 }
 
-// withSid — SignerInfo si с идентификатором подписанта (sid, второе поле) из from.
+// sid - второе поле SignerInfo
 func withSid(t *testing.T, si, from []byte) []byte {
 	t.Helper()
 	f := elements(t, si)
@@ -205,7 +196,6 @@ func withSid(t *testing.T, si, from []byte) []byte {
 	return constructed(t, asn1.ClassUniversal, asn1.TagSequence, fullBytes(f)...)
 }
 
-// elements — элементы конструктивного значения DER.
 func elements(t *testing.T, der []byte) []asn1.RawValue {
 	t.Helper()
 	var outer asn1.RawValue

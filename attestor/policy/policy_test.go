@@ -42,7 +42,7 @@ func TestCheck(t *testing.T) {
 		{"two O", with(func(f *Fields) { f.Organizations = []string{"ТОО «Ромашка»", "ТОО «Лютик»"} }), NoOrgName},
 		{"no legal entity EKU", with(func(f *Fields) { f.EKU = []string{OIDFirstHead} }), NotLegalEntity},
 	}
-	// O ровно в 128 байт (64 буквы по 2 байта) допустимо.
+	// 64 буквы по 2 байта: ровно 128, ещё допустимо
 	long := strings.Repeat("Ж", 64)
 	if s, err := Check(with(func(f *Fields) { f.Organizations = []string{long} }), now); err != nil || s.Name != long {
 		t.Fatalf("128-byte name: got %+v, %v", s, err)

@@ -1,7 +1,5 @@
-// Package server — HTTP-интерфейс аттестатора: POST /v1/attest проверяет CMS компании
-// и подписывает сообщение печати, GET /v1/info отдаёт ключ аттестатора и его TrustService.
-// Аттестатор ничего не хранит; в лог пишет результат, адрес и код ошибки — без названия,
-// БИН и полей сертификата.
+// Package server - HTTP API аттестатора. Ничего не хранит, а в лог пишет только результат,
+// адрес и код ошибки: ни названия, ни БИН, ни полей сертификата
 package server
 
 import (
@@ -26,22 +24,20 @@ import (
 	"mor/attestor/seal"
 )
 
-// Verifier проверяет CMS (base64) средствами KalkanCrypt и возвращает подписанные данные
-// и сертификат подписанта (DER). Ошибки: kalkan.ErrBadSignature, kalkan.ErrRevoked,
-// *kalkan.Error.
+// Verifier отдаёт ошибки kalkan.ErrBadSignature, kalkan.ErrRevoked или *kalkan.Error
 type Verifier interface {
 	Verify(cmsB64 string) (data, certDER []byte, err error)
 }
 
 type Config struct {
 	Verifier   Verifier
-	Key        ed25519.PrivateKey // ключ аттестатора; его TrustService зарегистрирован в реестре
-	Program    [32]byte           // program ID реестра
-	CORSOrigin string             // origin страницы; пусто — CORS выключен
-	Now        func() time.Time   // nil — time.Now
+	Key        ed25519.PrivateKey // его TrustService должен быть зарегистрирован в реестре
+	Program    [32]byte
+	CORSOrigin string           // пусто = CORS выключен
+	Now        func() time.Time // nil = time.Now
 }
 
-// DeadlineWindow — насколько вперёд от «сейчас» может быть deadline запроса, секунд.
+// DeadlineWindow в секундах: насколько далеко в будущем может быть deadline запроса
 const DeadlineWindow = 900
 
 const maxBody = 64 << 10
@@ -55,7 +51,7 @@ type Response struct {
 	TrustService   string `json:"trustService"`
 	Name           string `json:"name"`
 	BIN            string `json:"bin"`
-	Salt           string `json:"salt"` // hex; хранит владелец адреса
+	Salt           string `json:"salt"` // hex, хранит владелец адреса
 	IdentifierHash string `json:"identifierHash"`
 	ExpiresAt      int64  `json:"expiresAt"`
 	SignDeadline   int64  `json:"signDeadline"`
@@ -69,7 +65,7 @@ type Info struct {
 
 type apiError struct {
 	status  int
-	cause   error  // для лога: без персональных данных и полей сертификата
+	cause   error  // только для лога, без персональных данных и полей сертификата
 	Code    string `json:"error"`
 	Message string `json:"message"`
 }
@@ -141,8 +137,7 @@ func (s *server) attest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, ae.status, ae)
 }
 
-// process — поток из спека: 1–2 подпись, цепочка и отзыв (KalkanCrypt), 3 политика,
-// 4 запрос, 5–6 сообщение печати и подпись аттестатора. addr — адрес из запроса для лога.
+// вторым значением отдаёт адрес из запроса, он нужен только для лога
 func (s *server) process(w http.ResponseWriter, r *http.Request) (Response, string, error) {
 	var body struct {
 		CMS string `json:"cms"`
@@ -150,7 +145,7 @@ func (s *server) process(w http.ResponseWriter, r *http.Request) (Response, stri
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody)).Decode(&body); err != nil || body.CMS == "" {
 		return Response{}, "", fail(http.StatusBadRequest, "bad_json", `body must be {"cms": "<base64>"}, at most 64 KiB`, nil)
 	}
-	// NCALayer и KalkanCrypt могут переносить base64 по строкам — пробелы не значимы.
+	// NCALayer и KalkanCrypt бывает переносят base64 по строкам
 	cms := strings.Join(strings.Fields(body.CMS), "")
 	if _, err := base64.StdEncoding.DecodeString(cms); err != nil {
 		return Response{}, "", fail(http.StatusBadRequest, "bad_base64", "cms is not standard base64", nil)
@@ -195,7 +190,7 @@ func (s *server) process(w http.ResponseWriter, r *http.Request) (Response, stri
 	case req.Expires <= unix:
 		return Response{}, addr, fail(http.StatusUnprocessableEntity, "expires_in_past", "expires must be in the future", nil)
 	}
-	// Печать не переживает сертификат подписанта.
+	// печать не должна пережить сертификат подписанта
 	expiresAt := min(req.Expires, subject.NotAfter.Unix())
 
 	var salt [32]byte
@@ -227,7 +222,6 @@ func (s *server) process(w http.ResponseWriter, r *http.Request) (Response, stri
 	}, addr, nil
 }
 
-// cors пропускает запросы страницы с настроенного origin, включая preflight (OPTIONS).
 func (s *server) cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if o := s.cfg.CORSOrigin; o != "" && r.Header.Get("Origin") == o {

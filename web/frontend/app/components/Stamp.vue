@@ -19,7 +19,6 @@
 <script setup lang="ts">
 const props = withDefaults(defineProps<{ tone?: 'violet' | 'muted'; size?: number }>(), { tone: 'violet', size: 160 })
 const uid = useId()
-// Просроченная печать тем же оттиском, но серым
 const ink = computed(() => (props.tone === 'muted' ? '#5B6070' : '#6D28D9'))
 // Кромка с 12 волнами, как у логотипа
 const scallop = computed(() => {

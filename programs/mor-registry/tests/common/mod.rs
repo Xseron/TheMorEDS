@@ -34,11 +34,11 @@ use {
 pub const SECP256R1_PROGRAM_ID: Pubkey = pubkey!("Secp256r1SigVerify1111111111111111111111111");
 pub const ED25519_PROGRAM_ID: Pubkey = pubkey!("Ed25519SigVerify111111111111111111111111111");
 
-/// Тестовые ключи из fixtures/keys (только для тестов): ключ сертификатов Acme и ключ УЦ ca1.
+/// Ключ сертификатов Acme и ключ УЦ ca1
 pub const EE_KEY_PEM: &str = include_str!("../../../../fixtures/keys/ee.key");
 pub const CA1_KEY_PEM: &str = include_str!("../../../../fixtures/keys/ca1.key");
 
-/// Соль идентификатора в тестах eIDAS (для eIDAS она публична: идентификатор есть в сертификате).
+/// Для eIDAS соль не секрет: идентификатор и так есть в сертификате
 pub const SALT: [u8; 32] = [7; 32];
 
 pub type TxResult = Result<TransactionMetadata, FailedTransactionMetadata>;
@@ -55,15 +55,13 @@ pub const EE_NO_ORGID: &[u8] = include_bytes!("../../../../fixtures/ee_no_orgid.
 pub const EE_PERSON: &[u8] = include_bytes!("../../../../fixtures/ee_person.der");
 pub const EE_OCSP: &[u8] = include_bytes!("../../../../fixtures/ee_ocsp.der");
 
-/// (notBefore, notAfter) сертификата в unix-секундах.
 pub fn validity(der: &[u8]) -> (i64, i64) {
     let (tbs, _) = x509::split_certificate(der).unwrap();
     let info = x509::parse_tbs(tbs).unwrap();
     (info.not_before, info.not_after)
 }
 
-/// Часы тестов: notBefore `ee_small` + 3 дня. Фикстуры выпускаются в момент запуска
-/// `fixtures/gen.sh` на 10 лет, поэтому момент берётся из них, а не задаётся датой.
+/// Фикстуры выпускаются в момент запуска gen.sh, поэтому "сейчас" считаем от них, а не от даты
 pub fn now() -> i64 {
     validity(EE_SMALL).0 + 3 * 86_400
 }
@@ -72,7 +70,7 @@ pub fn sha256(data: &[u8]) -> [u8; 32] {
     Sha256::digest(data).into()
 }
 
-/// 0x04‖X‖Y → (0x02 | (Y & 1))‖X.
+/// 0x04||X||Y -> (0x02 | (Y & 1))||X
 pub fn compress_p256(uncompressed: &[u8]) -> [u8; 33] {
     assert_eq!(uncompressed.len(), 65);
     assert_eq!(uncompressed[0], 0x04);
@@ -118,8 +116,8 @@ fn program_bytes() -> Vec<u8> {
     std::fs::read(&path).unwrap_or_else(|e| panic!("run `anchor build` first: {path}: {e}"))
 }
 
-/// LiteSVM создаёт ProgramData с upgrade_authority_address = None.
-/// bincode-раскладка: [u32 tag = 3][u64 slot][u8 Some = 1][32 байта pubkey].
+/// LiteSVM создаёт ProgramData с upgrade_authority_address = None
+/// bincode-раскладка: [u32 tag = 3][u64 slot][u8 Some = 1][32 байта pubkey]
 fn set_upgrade_authority(svm: &mut LiteSVM, program_id: &Pubkey, authority: &Pubkey) {
     let (programdata, _) =
         Pubkey::find_program_address(&[program_id.as_ref()], &bpf_loader_upgradeable::ID);
@@ -242,7 +240,6 @@ impl Env {
         self.add_trust_service_raw(signer, kind, ca.pubkey, ca.spki_hash, ca.dn_hash, ca.name, ca.country)
     }
 
-    /// Регистрирует УЦ от админа, возвращает адрес TrustService.
     pub fn add_trust_service(&mut self, ca: &CaFixture) -> Pubkey {
         let admin = self.admin.insecure_clone();
         self.add_trust_service_as(&admin, TrustKind::P256Ca, ca)
@@ -256,7 +253,7 @@ impl Env {
     }
 }
 
-/// Layout SIMD-0075: [num_signatures u8][padding u8][7 x u16 LE][data].
+/// Layout SIMD-0075: [num_signatures u8][padding u8][7 x u16 LE][data]
 pub fn secp256r1_ix_raw(num_sigs: u8, offsets: [u16; 7], payload: &[u8]) -> Instruction {
     let mut data = Vec::with_capacity(16 + payload.len());
     data.push(num_sigs);
@@ -268,8 +265,7 @@ pub fn secp256r1_ix_raw(num_sigs: u8, offsets: [u16; 7], payload: &[u8]) -> Inst
     Instruction::new_with_bytes(SECP256R1_PROGRAM_ID, &data, vec![])
 }
 
-/// Self-contained instruction: pubkey, signature and message all live in it,
-/// every instruction_index == 0xFFFF. Data starts at offset 16.
+/// Всё внутри самой инструкции (instruction_index = 0xFFFF), данные с offset 16
 pub fn secp256r1_ix(pubkey: &[u8; 33], sig: &[u8; 64], msg: &[u8]) -> Instruction {
     let pk_off: u16 = 16;
     let sig_off: u16 = pk_off + 33;
@@ -291,9 +287,7 @@ pub fn send(
     signers: &[&Keypair],
     ixs: &[Instruction],
 ) -> Result<TransactionMetadata, FailedTransactionMetadata> {
-    // Ruling R2: force a fresh blockhash so every transaction is unique,
-    // otherwise LiteSVM rejects a byte-identical repeat with AlreadyProcessed
-    // before the program/precompile ever runs.
+    // Свежий blockhash: иначе LiteSVM отбросит повтор байт-в-байт как AlreadyProcessed ещё до программы
     svm.expire_blockhash();
     let blockhash = svm.latest_blockhash();
     let msg = Message::new_with_blockhash(ixs, Some(&payer.pubkey()), &blockhash);
@@ -303,7 +297,7 @@ pub fn send(
     svm.send_transaction(tx)
 }
 
-/// (failed instruction index, Custom code) — for Anchor errors code = 6000 + variant number.
+/// (индекс инструкции, Custom-код); у Anchor-ошибок код = 6000 + номер варианта
 pub fn failed_ix(err: &FailedTransactionMetadata) -> Option<(u8, u32)> {
     match &err.err {
         TransactionError::InstructionError(ix, InstructionError::Custom(code)) => Some((*ix, *code)),
@@ -311,7 +305,6 @@ pub fn failed_ix(err: &FailedTransactionMetadata) -> Option<(u8, u32)> {
     }
 }
 
-/// Anchor-ошибка `expected` в инструкции `ix_index` (коды 6000 + номер варианта).
 pub fn assert_mor_err(res: &TxResult, expected: MorError, ix_index: u8) {
     let want = u32::from(expected);
     match res {
@@ -323,7 +316,7 @@ pub fn assert_mor_err(res: &TxResult, expected: MorError, ix_index: u8) {
     }
 }
 
-/// s -> n - s: the signature stays mathematically valid but becomes high-S.
+/// s -> n - s: подпись остаётся верной, но становится high-S
 pub fn high_s(sig: &[u8; 64]) -> [u8; 64] {
     let s = Scalar::reduce(U256::from_be_slice(&sig[32..]));
     let neg = -s;
@@ -335,7 +328,7 @@ pub fn high_s(sig: &[u8; 64]) -> [u8; 64] {
 pub struct EeFixture {
     pub der: &'static [u8],
     pub tbs: &'static [u8],
-    /// r‖s big-endian, low-S.
+    /// r||s big-endian, low-S
     pub sig: [u8; 64],
     pub serial: Vec<u8>,
     pub subject_key: [u8; 33],
@@ -353,9 +346,7 @@ pub fn ee(der: &'static [u8]) -> EeFixture {
         tbs,
         sig: sig_bytes,
         serial: info.serial.to_vec(),
-        // Non-P256 subject keys (e.g. RSA fixtures used for UnsupportedKey tests) aren't a
-        // 65-byte uncompressed point; compress_p256 would panic, so fall back to a zeroed
-        // placeholder. subject_key is only asserted on for certificates that register successfully.
+        // У RSA-фикстур точки нет; subject_key проверяют только у успешно зарегистрированных
         subject_key: if info.public_key.len() == 65 && info.public_key[0] == 0x04 {
             compress_p256(info.public_key)
         } else {
@@ -397,7 +388,7 @@ impl Env {
     }
 }
 
-/// Подпись P-256 над сообщением (SHA-256 внутри): r и s big-endian, low-S — как требует прекомпайл.
+/// SHA-256 внутри; r||s big-endian и low-S, как требует прекомпайл
 pub fn sign_p256(pem: &str, msg: &[u8]) -> [u8; 64] {
     let key = SigningKey::from(SecretKey::from_sec1_pem(pem).unwrap());
     let sig: Signature = key.sign(msg);
@@ -407,13 +398,12 @@ pub fn sign_p256(pem: &str, msg: &[u8]) -> [u8; 64] {
     out
 }
 
-/// Сжатый SEC1 открытый ключ из PEM закрытого.
 pub fn p256_pubkey(pem: &str) -> [u8; 33] {
     let point = SecretKey::from_sec1_pem(pem).unwrap().public_key().to_encoded_point(true);
     point.as_bytes().try_into().unwrap()
 }
 
-/// Самодостаточная инструкция Ed25519-прекомпайла: ключ @16, подпись @48, сообщение @112.
+/// Всё внутри инструкции: ключ @16, подпись @48, сообщение @112
 pub fn ed25519_ix(pubkey: &[u8; 32], sig: &[u8; 64], msg: &[u8]) -> Instruction {
     let (pk_off, sig_off, msg_off) = (16u16, 48u16, 112u16);
     let mut data = vec![1u8, 0];
@@ -430,8 +420,7 @@ pub fn program_data_pda(program_id: &Pubkey) -> Pubkey {
     Pubkey::find_program_address(&[program_id.as_ref()], &bpf_loader_upgradeable::ID).0
 }
 
-/// Минт SPL Token с mint authority `authority`: 82 байта, is_initialized = 1.
-/// Повторный вызов — «смена mint authority».
+/// Минт SPL Token (82 байта); повторный вызов меняет mint authority
 pub fn set_mint(svm: &mut LiteSVM, mint: &Pubkey, authority: &Pubkey) {
     let mut data = vec![0u8; 82];
     data[..4].copy_from_slice(&[1, 0, 0, 0]);
@@ -450,7 +439,7 @@ pub fn set_mint(svm: &mut LiteSVM, mint: &Pubkey, authority: &Pubkey) {
     .unwrap();
 }
 
-/// Параметры печати, общие для обоих путей; тесты меняют одно поле, чтобы получить отказ.
+/// Общие для eIDAS и аттестатора; тесты портят одно поле, чтобы получить отказ
 #[derive(Clone, Debug)]
 pub struct SealReq {
     pub kind: AddressKind,
@@ -458,11 +447,10 @@ pub struct SealReq {
     pub controller: Pubkey,
     pub program_data: Option<Pubkey>,
     pub trust: Pubkey,
-    /// eIDAS: PDA Certificate; аттестатор: Pubkey::default().
+    /// eIDAS: PDA Certificate; аттестатор: Pubkey::default()
     pub certificate: Pubkey,
-    /// eIDAS: соль идентификатора.
+    // salt только для eIDAS, identifier_hash и name только для аттестатора
     pub salt: [u8; 32],
-    /// Аттестатор: хэш идентификатора и название.
     pub identifier_hash: [u8; 32],
     pub name: String,
     pub expires_at: i64,
@@ -470,7 +458,7 @@ pub struct SealReq {
 }
 
 impl SealReq {
-    /// Кошелёк `controller` запечатывает сам себя сертификатом `certificate` (eIDAS).
+    /// eIDAS: кошелёк запечатывает сам себя
     pub fn wallet(controller: &Pubkey, trust: &Pubkey, certificate: &Pubkey) -> SealReq {
         SealReq {
             kind: AddressKind::Wallet,
@@ -493,7 +481,7 @@ impl Env {
         Pubkey::find_program_address(&[mor_registry::SEAL_SEED, address.as_ref()], &self.program_id).0
     }
 
-    /// Регистрирует УЦ ca1 и сертификат ee_small; возвращает (TrustService, Certificate).
+    /// ca1 + ee_small; возвращает (TrustService, Certificate)
     pub fn eidas(&mut self) -> (Pubkey, Pubkey) {
         let ca = ca1();
         let trust = self.add_trust_service(&ca);
@@ -503,7 +491,7 @@ impl Env {
         (trust, self.cert_pda(&trust, &cert.serial))
     }
 
-    /// Сообщение eIDAS-печати: поля организации берутся из аккаунта Certificate.
+    /// Поля организации берутся из аккаунта Certificate
     pub fn p256_message(&self, r: &SealReq) -> Vec<u8> {
         let cert: Certificate = self.account(&r.certificate);
         let id = seal_message::identifier_hash(&r.salt, cert.country, &cert.org_id);
@@ -548,7 +536,7 @@ impl Env {
         )
     }
 
-    /// [secp256r1 над `msg` ключом `pem`, register_seal_p256]; платит и подписывает контролёр.
+    /// [secp256r1 над `msg` ключом `pem`, register_seal_p256]; платит и подписывает контролёр
     pub fn seal_p256_signed(&mut self, r: &SealReq, controller: &Keypair, pem: &str, msg: &[u8]) -> TxResult {
         let ixs = [secp256r1_ix(&p256_pubkey(pem), &sign_p256(pem, msg), msg), self.seal_p256_ix(r)];
         self.send(controller, &[], &ixs)
@@ -559,7 +547,7 @@ impl Env {
         self.revoke_with_seal(signer, address, &seal, program_data)
     }
 
-    /// Отзыв с явно заданным аккаунтом печати (для проверки, что печать и адрес связаны).
+    /// Явный seal нужен тестам на подмену печати
     pub fn revoke_with_seal(
         &mut self,
         signer: &Keypair,
@@ -581,7 +569,7 @@ impl Env {
         self.send(signer, &[], &[ix])
     }
 
-    /// Честная eIDAS-печать: ключ сертификата ee_small подписывает правильное сообщение.
+    /// Ключ ee_small подписывает правильное сообщение
     pub fn seal_p256(&mut self, r: &SealReq, controller: &Keypair) -> TxResult {
         let msg = self.p256_message(r);
         self.seal_p256_signed(r, controller, EE_KEY_PEM, &msg)
@@ -591,14 +579,13 @@ impl Env {
 pub const BIN: &str = "123456789012";
 pub const ROMASHKA: &str = "ТОО «Ромашка»";
 
-/// Тестовый ключ аттестатора (fixtures/keys/attestor.json, только для тестов).
 pub fn attestor() -> Keypair {
     solana_keypair::read_keypair_file(concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures/keys/attestor.json"))
         .unwrap()
 }
 
 impl SealReq {
-    /// Кошелёк `controller` запечатывает сам себя через аттестатора `trust` как «ТОО «Ромашка»».
+    /// Аттестатор: кошелёк запечатывает сам себя
     pub fn attested(controller: &Pubkey, trust: &Pubkey) -> SealReq {
         SealReq {
             kind: AddressKind::Wallet,
@@ -617,7 +604,6 @@ impl SealReq {
 }
 
 impl Env {
-    /// Регистрирует тестового аттестатора КЗ; возвращает адрес TrustService.
     pub fn add_attestor(&mut self) -> Pubkey {
         let kp = attestor();
         let mut pubkey = [0u8; 33];
@@ -629,7 +615,7 @@ impl Env {
         self.trust_pda(&spki)
     }
 
-    /// Сообщение, которое подписывает аттестатор (юрисдикция — страна аттестатора, KZ).
+    /// Юрисдикция: страна аттестатора
     pub fn attested_message(&self, r: &SealReq) -> Vec<u8> {
         SealMessage {
             address: &r.address,
@@ -672,14 +658,13 @@ impl Env {
         )
     }
 
-    /// [Ed25519 над `msg` ключом `signer`, register_seal_attested]; платит и подписывает контролёр.
+    /// [Ed25519 над `msg` ключом `signer`, register_seal_attested]; платит и подписывает контролёр
     pub fn seal_attested_signed(&mut self, r: &SealReq, controller: &Keypair, signer: &Keypair, msg: &[u8]) -> TxResult {
         let sig = signer.sign_message(msg);
         let ixs = [ed25519_ix(&signer.pubkey().to_bytes(), sig.as_ref().try_into().unwrap(), msg), self.seal_attested_ix(r)];
         self.send(controller, &[], &ixs)
     }
 
-    /// Честная печать через тестового аттестатора.
     pub fn seal_attested(&mut self, r: &SealReq, controller: &Keypair) -> TxResult {
         let msg = self.attested_message(r);
         self.seal_attested_signed(r, controller, &attestor(), &msg)

@@ -6,7 +6,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [features]
-# Сборка данных аккаунта печати для тестов программ-потребителей.
+# Сборка данных аккаунта печати для тестов программ-потребителей
 test-utils = []
 
 [dependencies]
@@ -16,7 +16,7 @@ solana-program-error = "3"
 solana-pubkey = "3"
 solana-sysvar = "3"
 
-# Вне сети create/find_program_address считаются в коде (curve25519), в сети — сисколлом.
+# Вне сети create/find_program_address считаются в коде (curve25519), в сети через сисколл
 [target.'cfg(not(target_os = "solana"))'.dependencies]
 solana-pubkey = { version = "3", features = ["curve25519", "sha2"] }
 

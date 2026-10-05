@@ -23,7 +23,7 @@ pub struct RegisterCertificate<'info> {
         bump
     )]
     pub certificate: Account<'info, Certificate>,
-    /// CHECK: адрес закреплён константой Instructions sysvar
+    /// CHECK: адрес закреплён на Instructions sysvar
     #[account(address = solana_instructions_sysvar::ID)]
     pub instructions: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
@@ -34,11 +34,9 @@ pub fn handle_register_certificate(ctx: Context<RegisterCertificate>, serial: Ve
     let ts = &ctx.accounts.trust_service;
     require!(ts.kind == TrustKind::P256Ca, MorError::UnsupportedTrustKind);
 
-    // Предыдущая инструкция — самодостаточный прекомпайл secp256r1.
     let data = precompile::previous_instruction_data(&ctx.accounts.instructions, &SECP256R1_PROGRAM_ID)?;
     let verified = precompile::parse_self_contained(&data, precompile::SECP256R1_KEY_LEN)?;
 
-    // Подписал именно этот УЦ.
     require!(verified.pubkey == ts.pubkey, MorError::UntrustedKey);
 
     let now = Clock::get()?.unix_timestamp;
@@ -70,7 +68,7 @@ pub struct CertFields<'a> {
     pub not_after: i64,
 }
 
-/// Политика реестра над разобранным TBS. Без аккаунтов, чтобы тестировать нативно.
+/// Отдельно от аккаунтов, чтобы тестировать нативно
 pub fn evaluate_certificate<'a>(tbs: &'a [u8], now: i64, issuer_dn_hash: &[u8; 32]) -> Result<CertFields<'a>> {
     let info = x509::parse_tbs(tbs).map_err(x509_error)?;
     require!(info.sig_alg_oid == OID_ECDSA_WITH_SHA256, MorError::BadSignatureAlgorithm);
@@ -85,8 +83,7 @@ pub fn evaluate_certificate<'a>(tbs: &'a [u8], now: i64, issuer_dn_hash: &[u8; 3
             && info.public_key[0] == 0x04,
         MorError::UnsupportedKey
     );
-    // Только конечный сертификат для подписи: не УЦ и не sub-CA (CA:TRUE, keyCertSign, cRLSign),
-    // keyUsage обязателен и разрешает подпись, незнакомых критичных расширений нет (RFC 5280 §4.2).
+    // Только конечный сертификат подписи, не УЦ. Незнакомое критичное расширение RFC 5280 §4.2 велит отвергать
     let signing = KU_DIGITAL_SIGNATURE | KU_NON_REPUDIATION;
     let issuing = KU_KEY_CERT_SIGN | KU_CRL_SIGN;
     require!(
@@ -95,14 +92,13 @@ pub fn evaluate_certificate<'a>(tbs: &'a [u8], now: i64, issuer_dn_hash: &[u8; 3
             && info.key_usage.is_some_and(|ku| ku & signing != 0 && ku & issuing == 0),
         MorError::NotEndEntity
     );
-    // TLS-сервер, TSA и OCSP подписывают данные, частично выбранные посторонними.
+    // TLS-сервер, TSA и OCSP подписывают данные, частично выбранные посторонними
     require!(!info.forbidden_purpose, MorError::ForbiddenKeyPurpose);
     let (org_name, org_id) = match (info.org_name, info.org_id) {
         (Some(name), Some(id)) if !name.is_empty() && !id.is_empty() => (name, id),
         _ => return err!(MorError::MissingOrgAttributes),
     };
-    // Сертификат физлица или сотрудника. Это страховка: TBS уже лежит в транзакции, поэтому
-    // личные данные не пускает в сеть клиентская проверка до отправки (scripts/devnet-v1).
+    // Только страховка: TBS уже в транзакции, ПДн в сеть не пускает проверка в клиенте (scripts/devnet-v1)
     require!(!info.has_person_attrs, MorError::NaturalPersonCert);
 
     let mut subject_key = [0u8; 33];
@@ -142,7 +138,7 @@ mod tests {
         x509::split_certificate(der).unwrap().0
     }
 
-    /// notBefore `ee_small` + 3 дня: фикстуры выпускаются в момент запуска gen.sh.
+    /// notBefore `ee_small` + 3 дня: фикстуры выпускаются в момент запуска gen.sh
     fn now() -> i64 {
         x509::parse_tbs(tbs(EE_SMALL)).unwrap().not_before + 3 * 86_400
     }
@@ -210,8 +206,7 @@ mod tests {
 
     #[test]
     fn rejects_ca_certificate() {
-        // Сертификат самого УЦ проходит все проверки субъекта (O, organizationIdentifier, P-256),
-        // но это CA:TRUE с keyCertSign/cRLSign, а не печать организации.
+        // Субъект УЦ проходит все проверки, отсечь его должны CA:TRUE и keyCertSign/cRLSign
         expect_err(evaluate_certificate(tbs(CA1), now(), &ca1_dn_hash()), MorError::NotEndEntity);
     }
 

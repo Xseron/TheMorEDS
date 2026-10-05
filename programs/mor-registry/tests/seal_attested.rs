@@ -17,7 +17,7 @@ fn setup() -> (Env, Pubkey) {
     (env, trust)
 }
 
-// 2. Кошелёк «ТОО «Ромашка»» запечатан через аттестатора; БИН — только хэшем с солью.
+// БИН в печать попадает только хэшем с солью
 #[test]
 fn seals_wallet_through_attestor() {
     let (mut env, trust) = setup();
@@ -40,7 +40,6 @@ fn seals_wallet_through_attestor() {
     assert_eq!(seal.name, ROMASHKA);
 }
 
-// 11. Аттестатор подписал одно, в аргументах — другой хэш идентификатора или другое название.
 #[test]
 fn rejects_arguments_that_differ_from_attestation() {
     let (mut env, trust) = setup();
@@ -56,12 +55,11 @@ fn rejects_arguments_that_differ_from_attestation() {
     forged.name = "ТОО «Лютик»".to_string();
     assert_mor_err(&env.seal_attested_signed(&forged, &romashka, &attestor(), &msg), MorError::SealMessageMismatch, 1);
 
-    // Та же подпись, но чужим Ed25519-ключом, не аттестатора.
+    // Сообщение то же, ключ чужой
     let stranger = solana_keypair::Keypair::new();
     assert_mor_err(&env.seal_attested_signed(&r, &romashka, &stranger, &msg), MorError::UntrustedKey, 1);
 }
 
-// 12. УЦ P-256 на пути аттестатора.
 #[test]
 fn rejects_p256_trust_service_on_attested_path() {
     let (mut env, _trust) = setup();

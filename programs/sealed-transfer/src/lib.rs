@@ -1,5 +1,4 @@
-//! Демо-потребитель Mör: transfer hook Token-2022, который пропускает перевод, только если у
-//! владельца токен-аккаунта получателя есть действующая печать Mör.
+//! Демо transfer hook Token-2022: перевод проходит, только если у владельца получателя есть печать Mör
 
 use anchor_lang::{prelude::*, solana_program::program_option::COption};
 use spl_discriminator::SplDiscriminate;
@@ -13,20 +12,20 @@ use spl_transfer_hook_interface::instruction::ExecuteInstruction;
 declare_id!("2A8chB6zt4LCsiiks5NrY3DceHvAVqWkAmMdNpyFkhz2");
 
 pub const TOKEN_2022_ID: Pubkey = pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-/// Реестр Mör и сид печати — из крейта, которым пользуется любой сторонний потребитель.
+/// Из того же крейта, что берут сторонние потребители
 pub use mor_verify_seal::{MOR_REGISTRY_ID, SEAL_SEED};
 use mor_verify_seal::{verify_seal, TrustLevel};
 pub const POLICY_SEED: &[u8] = b"policy";
-/// Сид списка дополнительных аккаунтов задан интерфейсом transfer hook.
+/// Задан интерфейсом transfer hook
 pub const EXTRA_METAS_SEED: &[u8] = b"extra-account-metas";
-/// Дополнительные аккаунты `execute`: реестр (5), политика (6), печать получателя (7).
+/// Extra-аккаунты `execute`: реестр (5), политика (6), печать получателя (7)
 pub const EXTRA_METAS_LEN: usize = 3;
 
 #[program]
 pub mod sealed_transfer {
     use super::*;
 
-    /// Политика минта и список дополнительных аккаунтов для Token-2022. Подписывает mint authority.
+    /// Создаёт политику и extra-account-metas, подписывает mint authority
     pub fn initialize(ctx: Context<InitializeHook>, min_trust_level: u8) -> Result<()> {
         require!(TrustLevel::from_u8(min_trust_level).is_some(), HookError::BadTrustLevel);
         {
@@ -45,8 +44,7 @@ pub mod sealed_transfer {
                 false,
                 false,
             )?,
-            // Печать владельца токен-аккаунта получателя: PDA программы-реестра (аккаунт 5),
-            // сиды — "seal" и байты 32..64 данных аккаунта 2 (поле owner токен-аккаунта).
+            // PDA реестра (аккаунт 5) из "seal" и owner получателя: байты 32..64 аккаунта 2
             ExtraAccountMeta::new_external_pda_with_seeds(
                 5,
                 &[
@@ -69,10 +67,10 @@ pub mod sealed_transfer {
         Ok(())
     }
 
-    /// Token-2022 вызывает это на каждый transfer_checked минта.
+    /// Token-2022 вызывает это на каждый transfer_checked минта
     #[instruction(discriminator = ExecuteInstruction::SPL_DISCRIMINATOR_SLICE)]
     pub fn execute(ctx: Context<Execute>, _amount: u64) -> Result<()> {
-        // Прямой вызов хука мимо Token-2022 ничего не должен разрешать.
+        // Прямой вызов хука мимо Token-2022 ничего не должен разрешать
         {
             let data = ctx.accounts.source.try_borrow_data()?;
             let source = StateWithExtensions::<TokenAccount>::unpack(&data[..])?;
@@ -86,7 +84,6 @@ pub mod sealed_transfer {
             StateWithExtensions::<TokenAccount>::unpack(&data[..])?.base.owner
         };
         let min = TrustLevel::from_u8(ctx.accounts.policy.min_trust_level).ok_or(HookError::BadTrustLevel)?;
-        // Одна строка: у владельца получателя действующая печать нужного уровня.
         verify_seal(&ctx.accounts.seal, &owner, min)?;
         Ok(())
     }
@@ -99,7 +96,7 @@ pub struct InitializeHook<'info> {
     /// CHECK: минт Token-2022; mint authority проверяется в обработчике
     #[account(owner = TOKEN_2022_ID)]
     pub mint: UncheckedAccount<'info>,
-    /// CHECK: список дополнительных аккаунтов, создаётся здесь; раскладку пишет ExtraAccountMetaList
+    /// CHECK: создаётся здесь, раскладку пишет ExtraAccountMetaList
     #[account(
         init,
         payer = authority,
@@ -121,20 +118,20 @@ pub struct InitializeHook<'info> {
 
 #[derive(Accounts)]
 pub struct Execute<'info> {
-    /// CHECK: токен-аккаунт отправителя; флаг transferring проверяется в обработчике
+    /// CHECK: флаг transferring проверяется в обработчике
     #[account(owner = TOKEN_2022_ID)]
     pub source: UncheckedAccount<'info>,
     /// CHECK: минт перевода
     pub mint: UncheckedAccount<'info>,
-    /// CHECK: токен-аккаунт получателя; его владелец — байты 32..64
+    /// CHECK: owner (байты 32..64) идёт в сиды печати
     #[account(owner = TOKEN_2022_ID)]
     pub destination: UncheckedAccount<'info>,
     /// CHECK: authority перевода, хуку не нужна
     pub authority: UncheckedAccount<'info>,
-    /// CHECK: список дополнительных аккаунтов этого минта
+    /// CHECK: extra-account-metas этого минта, проверен сидами
     #[account(seeds = [EXTRA_METAS_SEED, mint.key().as_ref()], bump)]
     pub extra_account_meta_list: UncheckedAccount<'info>,
-    /// CHECK: программа реестра Mör — только ключ, для вывода PDA печати
+    /// CHECK: нужен только ключ, для PDA печати
     #[account(address = MOR_REGISTRY_ID)]
     pub mor_registry: UncheckedAccount<'info>,
     #[account(
@@ -143,16 +140,15 @@ pub struct Execute<'info> {
         has_one = mint @ HookError::PolicyMismatch
     )]
     pub policy: Account<'info, Policy>,
-    /// CHECK: печать владельца получателя; проверяется крейтом mor-verify-seal
+    /// CHECK: проверяет mor-verify-seal
     pub seal: UncheckedAccount<'info>,
 }
 
-/// Политика минта: минимальный уровень доверия печати получателя.
 #[account]
 #[derive(InitSpace)]
 pub struct Policy {
     pub mint: Pubkey,
-    /// 0 — Attestor, 1 — Trustless (как `TrustLevel` реестра).
+    /// 0: Attestor, 1: Trustless, как `TrustLevel` реестра
     pub min_trust_level: u8,
     pub bump: u8,
 }

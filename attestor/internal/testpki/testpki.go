@@ -19,10 +19,10 @@ import (
 	"mor/attestor/kalkan"
 )
 
-// Password — пароль всех тестовых ключей НУЦ в SDK.
+// Password общий для всех тестовых ключей НУЦ в SDK
 const Password = "Qwerty12"
 
-// Path — путь от корня репозитория (каталог с Anchor.toml).
+// Path считает от корня репозитория
 func Path(parts ...string) string {
 	return filepath.Join(append([]string{root()}, parts...)...)
 }
@@ -44,7 +44,6 @@ func root() string {
 	}
 }
 
-// Lib — путь к KalkanCrypt: KALKAN_LIB или сертифицированная 2.0.2 из SDK.
 func Lib() string {
 	if p := os.Getenv("KALKAN_LIB"); p != "" {
 		return p
@@ -52,7 +51,7 @@ func Lib() string {
 	return Path("pkisdk", "C", "Linux", "C", "libs", "v2.0.2 (Сертифицированная версия)", "libkalkancryptwr-64.so.2.0.2")
 }
 
-// CAs — тестовые УЦ НУЦ 2022: корневой, затем промежуточный.
+// CAs отдаёт сначала корневой, потом промежуточный
 func CAs() []string {
 	return []string{
 		Path("pkisdk", "Keys and Certs", "CA_Test", "ROOT", "root_test_gost_2022.cer"),
@@ -60,13 +59,11 @@ func CAs() []string {
 	}
 }
 
-// CRLs — CRL тестового УЦ НУЦ 2022.
 func CRLs() []string {
 	return []string{Path("pkisdk", "nca_gost2022_test.crl")}
 }
 
-// P12 — единственный ключ юрлица в каталоге SDK: role — «Первый руководитель»,
-// «Сотрудник с правом подписи», «Сотрудник организации»; state — valid или revoke.
+// P12 ищет ключ юрлица по каталогам SDK, например role "Первый руководитель" и state valid или revoke
 func P12(t testing.TB, role, state string) string {
 	t.Helper()
 	m, err := filepath.Glob(Path("pkisdk", "Keys and Certs", "Gost2015", "2026.05.08-2027.05.07", "Юридическое лицо", role, state, "*.p12"))
@@ -76,8 +73,6 @@ func P12(t testing.TB, role, state string) string {
 	return m[0]
 }
 
-// Sign подписывает data ключом из p12 через KalkanCrypt: присоединённая CMS в base64,
-// как createCAdESFromBase64 в NCALayer.
 func Sign(t testing.TB, p12 string, data []byte) string {
 	t.Helper()
 	if err := kalkan.LoadKeyStore(p12, Password); err != nil {
@@ -90,10 +85,8 @@ func Sign(t testing.TB, p12 string, data []byte) string {
 	return cms
 }
 
-// ForgedCert — RSA-сертификат «двойник»: издатель носит DN и SubjectKeyId настоящего УЦ
-// (issuer), сертификат подписан одноразовым ключом, а не ключом УЦ. serial и ski задают
-// серийный номер и SubjectKeyId (ski может быть nil); EKU — юрлицо и первый руководитель.
-// Возвращает DER сертификата и его закрытый ключ.
+// ForgedCert выпускает RSA-сертификат от поддельного УЦ с DN и SubjectKeyId настоящего issuer,
+// подписанный одноразовым ключом. ski может быть nil
 func ForgedCert(t testing.TB, issuer *x509.Certificate, serial *big.Int, subject pkix.Name, ski []byte) ([]byte, *rsa.PrivateKey) {
 	t.Helper()
 	now := time.Now()
@@ -131,8 +124,7 @@ func ForgedCert(t testing.TB, issuer *x509.Certificate, serial *big.Int, subject
 	return leafDER, key
 }
 
-// P12FromKey собирает PKCS#12 из сертификата и ключа через openssl (старые алгоритмы —
-// их читает KalkanCrypt) и возвращает путь к файлу во временном каталоге теста.
+// P12FromKey собирает p12 через openssl со старыми PBE: такие KalkanCrypt читает
 func P12FromKey(t testing.TB, certDER []byte, key *rsa.PrivateKey) string {
 	t.Helper()
 	keyDER, err := x509.MarshalPKCS8PrivateKey(key)

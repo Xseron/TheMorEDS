@@ -1,7 +1,7 @@
 //go:build kalkan
 
-// Команда attestor: serve — HTTP-аттестатор НУЦ РК; sign-request — dev-замена NCALayer,
-// подписывает текст запроса тестовым ключом через KalkanCrypt. Запускать из корня репозитория.
+// Команда attestor: serve поднимает аттестатор, sign-request подписывает запрос тестовым ключом
+// вместо NCALayer. Запускать из корня репозитория
 package main
 
 import (
@@ -23,7 +23,7 @@ import (
 	"mor/attestor/server"
 )
 
-// Пути по умолчанию — тестовая иерархия НУЦ из SDK (pkisdk/ в git не входит).
+// по умолчанию тестовая иерархия НУЦ из SDK, pkisdk/ в git не лежит
 const (
 	testRoot     = "pkisdk/Keys and Certs/CA_Test/ROOT/root_test_gost_2022.cer"
 	testNCA      = "pkisdk/Keys and Certs/CA_Test/NCA/nca_gost2022_test.cer"
@@ -135,7 +135,7 @@ func signRequest(args []string) error {
 	if err != nil {
 		return err
 	}
-	// Заведомо битый запрос не подписываем: аттестатор всё равно его отклонит.
+	// битый запрос аттестатор всё равно отклонит
 	if _, err := request.Parse(text); err != nil {
 		return err
 	}

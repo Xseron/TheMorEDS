@@ -9,16 +9,15 @@ use crate::{
     state::{AddressKind, Seal, SubjectType, TrustKind, TrustLevel, TrustService},
 };
 
-/// Печать через аттестатора: он проверил государственную подпись вне сети (ГОСТ, НУЦ РК) и
-/// подписал сообщение Ed25519-ключом (прекомпайл прямо перед этой инструкцией). Персональных
-/// данных подписанта в сообщении нет: только название организации и хэш БИН с солью.
+/// Аттестатор проверил ГОСТ-подпись НУЦ РК вне сети и подписал сообщение Ed25519
+/// ПДн подписанта в сообщение не попадают, только название организации и хэш БИН с солью
 #[derive(Accounts)]
 pub struct RegisterSealAttested<'info> {
     #[account(mut)]
     pub controller: Signer<'info>,
-    /// CHECK: запечатываемый адрес; контроль проверяет controller::controls
+    /// CHECK: проверяется в controller::controls
     pub address: UncheckedAccount<'info>,
-    /// CHECK: ProgramData для kind = Program; проверяется в controller::controls
+    /// CHECK: ProgramData при kind = Program, проверяется в controller::controls
     pub program_data: Option<UncheckedAccount<'info>>,
     pub trust_service: Account<'info, TrustService>,
     #[account(
@@ -29,7 +28,7 @@ pub struct RegisterSealAttested<'info> {
         bump
     )]
     pub seal: Account<'info, Seal>,
-    /// CHECK: адрес закреплён константой Instructions sysvar
+    /// CHECK: адрес закреплён на Instructions sysvar
     #[account(address = solana_instructions_sysvar::ID)]
     pub instructions: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
@@ -60,7 +59,7 @@ pub fn handle_register_seal_attested(
 
     let now = Clock::get()?.unix_timestamp;
     require!(now <= sign_deadline, MorError::SignDeadlinePassed);
-    // Верхнюю границу срока аттестатор берёт из сертификата НУЦ.
+    // Верхнюю границу срока аттестатор берёт из сертификата НУЦ
     require!(now < expires_at, MorError::InvalidExpiry);
     require!(!name.is_empty(), MorError::MissingOrgAttributes);
     require!(name.len() <= MAX_SEAL_NAME_LEN, MorError::FieldTooLong);

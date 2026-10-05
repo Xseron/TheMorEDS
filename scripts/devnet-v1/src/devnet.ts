@@ -1,4 +1,4 @@
-// Общее для сценариев devnet: RPC, отправка v0/v1-транзакций, PDA, демо-ключи.
+// Общее для devnet-сценариев: RPC, отправка транзакций, PDA, демо-ключи
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -31,7 +31,7 @@ export const DEMO = join(homedir(), '.config/solana/mor-demo');
 const RPC = process.env.RPC_URL ?? 'https://api.devnet.solana.com';
 const WS = process.env.WS_URL ?? 'wss://api.devnet.solana.com';
 export const PROGRAM_ID = process.env.PROGRAM_ID ?? 'CqbwC3DF4APG6cjRneir1UPuBbh49ttBrKasfc5QP1aP';
-// Адрес хука — из Anchor.toml, чтобы не дублировать его в коде.
+// берём из Anchor.toml, чтобы не дублировать адрес
 export const HOOK_ID =
   process.env.HOOK_ID ?? readFileSync(join(ROOT, 'Anchor.toml'), 'utf8').match(/sealed_transfer = "(\w+)"/)![1];
 
@@ -44,7 +44,7 @@ export const utf8 = (s: string) => new TextEncoder().encode(s);
 export const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
 export const loadKeypair = (p: string) => createKeyPairSignerFromBytes(new Uint8Array(JSON.parse(readFileSync(p, 'utf8'))));
 
-/** Демо-ключ: создаётся при первом запуске и переиспользуется (формат keypair Solana, 64 байта). */
+// Формат Solana CLI: 32 байта seed, затем pubkey
 export async function demoKey(name: string): Promise<KeyPairSigner> {
   const path = join(DEMO, `${name}.json`);
   if (!existsSync(path)) {
@@ -56,7 +56,7 @@ export async function demoKey(name: string): Promise<KeyPairSigner> {
   return loadKeypair(path);
 }
 
-/** Custom-код ошибки в цепочке ошибок kit или в логах preflight-симуляции. */
+// Код бывает в context.code где-то в цепочке cause, а бывает только в логах preflight
 export function hasCustomError(e: unknown, code: number): boolean {
   const needle = `custom program error: 0x${code.toString(16)}`;
   for (let cur: any = e; cur; cur = cur.cause) {
@@ -67,7 +67,7 @@ export function hasCustomError(e: unknown, code: number): boolean {
   return false;
 }
 
-/** Подключение к devnet: плательщик (админ реестра и эмитент токена) и помощники отправки. */
+// payer из id.json: он же админ реестра и эмитент демо-токена
 export async function connect() {
   const rpc = createSolanaRpc(RPC);
   const rpcSubscriptions = createSolanaRpcSubscriptions(WS);
@@ -87,8 +87,7 @@ export async function connect() {
   const sealOf = (owner: Address) => pda(['seal', bytesOf(owner)]);
   const report = (label: string, sig: string) => console.log(`${label}: https://explorer.solana.com/tx/${sig}?cluster=devnet`);
 
-  // signTransactionMessageWithSigners types the lifetime as blockhash | durable-nonce; we only build
-  // blockhash-lifetime messages, so the cast to sendAndConfirm's parameter type is safe (as in main.ts).
+  // Lifetime у нас всегда blockhash, поэтому каст безопасен
   async function sendV0(label: string, feePayer: KeyPairSigner, instructions: Instruction[]) {
     const { value: blockhash } = await rpc.getLatestBlockhash().send();
     const tx = await signTransactionMessageWithSigners(
@@ -103,7 +102,7 @@ export async function connect() {
     report(label, getSignatureFromTransaction(tx));
   }
 
-  /** Регистрация печати — v1-транзакция; в v1 незаданные лимиты равны нулю, поэтому они явные. */
+  // В v1 незаданные лимиты равны нулю, а не дефолтам
   async function sendV1(label: string, feePayer: KeyPairSigner, instructions: Instruction[]) {
     const { value: blockhash } = await rpc.getLatestBlockhash().send();
     const tx = await signTransactionMessageWithSigners(
@@ -123,7 +122,6 @@ export async function connect() {
     report(label, getSignatureFromTransaction(tx));
   }
 
-  /** Транзакция, которую хук обязан отклонить: preflight-симуляция падает с кодом `code`. */
   async function sendRejected(label: string, feePayer: KeyPairSigner, instructions: Instruction[], code: number) {
     try {
       await sendV0(label, feePayer, instructions);

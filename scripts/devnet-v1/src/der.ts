@@ -1,6 +1,4 @@
-// Минимальный DER: ровно то, что нужно, чтобы вытащить из сертификата TBS, подпись,
-// серийный номер, issuer и SubjectPublicKeyInfo и проверить subject до отправки.
-// Зеркало programs/mor-registry/src/x509.rs.
+// Минимальный DER-разбор сертификата, зеркало programs/mor-registry/src/x509.rs
 
 export type Tlv = { tag: number; body: Uint8Array; raw: Uint8Array; rest: Uint8Array };
 
@@ -27,14 +25,15 @@ function expect(buf: Uint8Array, tag: number): Tlv {
   return t;
 }
 
+// Полные TLV: tbs, issuer, subject, spki; у serial только содержимое INTEGER
 export type CertParts = {
-  tbs: Uint8Array; // полный TLV
+  tbs: Uint8Array;
   signature: Uint8Array; // ECDSA-Sig-Value DER
-  serial: Uint8Array; // содержимое INTEGER
-  issuer: Uint8Array; // полный TLV Name
-  subject: Uint8Array; // полный TLV Name
-  spki: Uint8Array; // полный TLV SubjectPublicKeyInfo
-  publicKey: Uint8Array; // 65 байт 0x04‖X‖Y
+  serial: Uint8Array;
+  issuer: Uint8Array;
+  subject: Uint8Array;
+  spki: Uint8Array;
+  publicKey: Uint8Array; // 65 байт 0x04||X||Y
 };
 
 export function parseCertificate(der: Uint8Array): CertParts {
@@ -67,8 +66,7 @@ export function parseCertificate(der: Uint8Array): CertParts {
   };
 }
 
-// Политика subject — та же, что в программе (x509.rs, evaluate_certificate): печать юрлица
-// с O и organizationIdentifier, без атрибутов физлица. OID — DER-содержимое в hex.
+// Та же политика subject, что evaluate_certificate в программе. OID как DER-содержимое в hex
 const OID_O = '55040a'; // 2.5.4.10 organizationName
 const OID_ORG_ID = '550461'; // 2.5.4.97 organizationIdentifier
 const PERSON_ATTRS: Record<string, string> = {
@@ -80,7 +78,7 @@ const PERSON_ATTRS: Record<string, string> = {
 
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 
-/** Почему сертификат с таким subject (полный TLV Name) нельзя отправлять в сеть; null — можно. */
+/** Причина не отправлять сертификат или null; subject передаётся полным TLV Name */
 export function subjectPolicyViolation(subject: Uint8Array): string | null {
   const name = expect(subject, 0x30);
   if (name.rest.length !== 0) throw new Error('DER: trailing bytes after Name');
@@ -121,7 +119,7 @@ function to32(v: bigint): Uint8Array {
   return out;
 }
 
-/** ECDSA-Sig-Value DER → 64 байта r‖s big-endian, s приведено к low-S (s > n/2 → n − s). */
+/** ECDSA-Sig-Value DER -> 64 байта r||s big-endian, s в low-S */
 export function signatureToLowS(der: Uint8Array): Uint8Array {
   const seq = expect(der, 0x30);
   const r = expect(seq.body, 0x02);
@@ -134,7 +132,6 @@ export function signatureToLowS(der: Uint8Array): Uint8Array {
   return out;
 }
 
-/** 0x04‖X‖Y → (0x02 | (Y & 1))‖X */
 export function compressP256(uncompressed: Uint8Array): Uint8Array {
   if (uncompressed.length !== 65 || uncompressed[0] !== 0x04) throw new Error('not an uncompressed P-256 point');
   const out = new Uint8Array(33);

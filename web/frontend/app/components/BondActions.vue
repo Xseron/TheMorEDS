@@ -53,7 +53,6 @@ const t = computed(() => props.view.bond.terms)
 const isIssuer = computed(() => wallet.value?.address === props.view.bond.issuer)
 const kClock = computed(() => eventsRecorded(t.value, props.now))
 const event = (k: number) => props.view.events.find(e => e.k === k)
-// Самое раннее наступившее событие, которое ещё не полное
 const pendingK = computed(() => { for (let k = 1; k <= kClock.value; k++) if (!event(k)?.complete) return k; return 0 })
 const pendingRows = computed(() => props.view.rows.filter(r => r.lastEvent === pendingK.value - 1))
 const announceK = computed(() => (event(2)?.redemptionBps || props.now >= noticeDeadline(t.value, 2) || t.value.nEvents <= 2 ? 0 : 2))

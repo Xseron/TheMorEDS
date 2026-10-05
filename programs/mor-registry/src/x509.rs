@@ -1,5 +1,4 @@
-//! Минимальный строгий DER-разбор X.509: только то, что нужно реестру.
-//! Без внешних крейтов и аллокаций: все результаты — срезы входного буфера.
+//! Строгий DER-разбор X.509 ровно под нужды реестра, без аллокаций
 
 use crate::constants::*;
 
@@ -26,7 +25,6 @@ const TAG_SET: u8 = 0x31;
 const TAG_VERSION: u8 = 0xa0; // [0] EXPLICIT
 const TAG_EXTENSIONS: u8 = 0xa3; // [3] EXPLICIT
 
-/// Один элемент DER: тег, содержимое и полные байты (для хэшей).
 #[derive(Clone, Copy, Debug)]
 pub struct Tlv<'a> {
     pub tag: u8,
@@ -34,8 +32,7 @@ pub struct Tlv<'a> {
     pub raw: &'a [u8],
 }
 
-/// Читает TLV в начале `buf`; возвращает его и остаток буфера.
-/// Только определённые длины не длиннее 4 байт в минимальной форме.
+/// Длина только определённая, до 4 байт и в минимальной форме
 pub fn read_tlv(buf: &[u8]) -> R<(Tlv<'_>, &[u8])> {
     let tag = *buf.first().ok_or(X509Error::Malformed)?;
     let first = *buf.get(1).ok_or(X509Error::Malformed)?;
@@ -77,8 +74,7 @@ fn bit_string_bytes(tlv: Tlv<'_>) -> R<&[u8]> {
     Ok(bytes)
 }
 
-/// Certificate ::= SEQUENCE { tbsCertificate, signatureAlgorithm, signatureValue BIT STRING }.
-/// Возвращает полный TLV TBS и байты подписи без байта unused bits.
+/// Возвращает TBS целиком (с тегом и длиной) и подпись без байта unused bits
 pub fn split_certificate(der: &[u8]) -> R<(&[u8], &[u8])> {
     let (cert, rest) = expect(der, TAG_SEQUENCE)?;
     if !rest.is_empty() {
@@ -94,38 +90,29 @@ pub fn split_certificate(der: &[u8]) -> R<(&[u8], &[u8])> {
 }
 
 pub struct TbsInfo<'a> {
-    /// Содержимое INTEGER как есть, вместе с ведущим нулём.
+    /// Как есть, вместе с ведущим нулём
     pub serial: &'a [u8],
     pub sig_alg_oid: &'a [u8],
-    /// Полный TLV Name издателя — для sha256.
+    // issuer, subject и spki хранятся полными TLV, от них считаются хэши
     pub issuer: &'a [u8],
     pub not_before: i64,
     pub not_after: i64,
-    /// Полный TLV Name субъекта.
     pub subject: &'a [u8],
-    /// Полный TLV SubjectPublicKeyInfo — для сида TrustService.
     pub spki: &'a [u8],
     pub spki_alg_oid: &'a [u8],
     pub spki_params_oid: Option<&'a [u8]>,
-    /// Содержимое BIT STRING ключа без байта unused bits (65 байт для P-256).
     pub public_key: &'a [u8],
     pub org_name: Option<&'a str>,
     pub org_id: Option<&'a str>,
     pub country: Option<[u8; 2]>,
-    /// В subject есть surname, givenName, serialNumber или pseudonym.
     pub has_person_attrs: bool,
-    /// basicConstraints cA; false, если расширения нет.
     pub ca: bool,
-    /// Биты KeyUsage (бит n — `1 << n`); None, если расширения нет.
     pub key_usage: Option<u16>,
-    /// Есть критичное расширение, которое реестр не знает.
     pub unknown_critical: bool,
-    /// extKeyUsage содержит serverAuth, timeStamping или OCSPSigning.
+    /// serverAuth, timeStamping или OCSPSigning в extKeyUsage
     pub forbidden_purpose: bool,
 }
 
-/// TBSCertificate ::= SEQUENCE { version [0] EXPLICIT OPTIONAL, serialNumber, signature,
-/// issuer, validity, subject, subjectPublicKeyInfo, ... extensions }.
 pub fn parse_tbs(tbs: &[u8]) -> R<TbsInfo<'_>> {
     let (seq, rest) = expect(tbs, TAG_SEQUENCE)?;
     if !rest.is_empty() {
@@ -194,10 +181,8 @@ struct Extensions {
     forbidden_purpose: bool,
 }
 
-/// Хвост TBS после SubjectPublicKeyInfo: пусто или ровно `[3] EXPLICIT Extensions`, где
-/// Extensions ::= SEQUENCE SIZE (1..MAX) OF Extension,
-/// Extension ::= SEQUENCE { extnID OID, critical BOOLEAN DEFAULT FALSE, extnValue OCTET STRING }.
-/// issuerUniqueID/subjectUniqueID (v2, RFC 5280 запрещает их выпускать) и любой другой хвост — Malformed.
+/// После SPKI допускается только `[3] Extensions` или ничего. issuerUniqueID/subjectUniqueID
+/// тоже считаем Malformed: RFC 5280 их выпускать запрещает
 fn parse_extensions(after_spki: &[u8]) -> R<Extensions> {
     let mut out = Extensions::default();
     if after_spki.is_empty() {
@@ -230,7 +215,7 @@ fn parse_extensions(after_spki: &[u8]) -> R<Extensions> {
             return Err(X509Error::Malformed);
         }
         let oid = oid.body;
-        // Повтор расширения запрещён RFC 5280 и сделал бы результат зависимым от порядка.
+        // Дубли запрещены RFC 5280, да и результат зависел бы от порядка
         if oid == OID_BASIC_CONSTRAINTS {
             if seen_basic_constraints {
                 return Err(X509Error::Malformed);
@@ -255,8 +240,8 @@ fn parse_extensions(after_spki: &[u8]) -> R<Extensions> {
     Ok(out)
 }
 
-/// DER BOOLEAN: FF — истина, 00 — ложь (явный FALSE вместо DEFAULT выпускают некоторые УЦ,
-/// читается он однозначно). Другие значения и длины — Malformed.
+/// Явный FALSE вместо DEFAULT по DER не положен, но некоторые УЦ его выпускают,
+/// а читается он однозначно
 fn boolean(tlv: Tlv<'_>) -> R<bool> {
     match (tlv.tag, tlv.body) {
         (TAG_BOOLEAN, [0xff]) => Ok(true),
@@ -265,7 +250,6 @@ fn boolean(tlv: Tlv<'_>) -> R<bool> {
     }
 }
 
-/// BasicConstraints ::= SEQUENCE { cA BOOLEAN DEFAULT FALSE, pathLenConstraint INTEGER OPTIONAL }.
 fn basic_constraints_ca(value: &[u8]) -> R<bool> {
     let (seq, rest) = expect(value, TAG_SEQUENCE)?;
     if !rest.is_empty() {
@@ -291,8 +275,6 @@ fn basic_constraints_ca(value: &[u8]) -> R<bool> {
     Ok(ca)
 }
 
-/// ExtKeyUsageSyntax ::= SEQUENCE SIZE (1..MAX) OF KeyPurposeId (OID).
-/// true, если среди назначений есть serverAuth, timeStamping или OCSPSigning.
 fn ext_key_usage_forbidden(value: &[u8]) -> R<bool> {
     let (seq, rest) = expect(value, TAG_SEQUENCE)?;
     if !rest.is_empty() || seq.body.is_empty() {
@@ -310,9 +292,7 @@ fn ext_key_usage_forbidden(value: &[u8]) -> R<bool> {
     Ok(forbidden)
 }
 
-/// KeyUsage ::= BIT STRING; именованные биты 0..8 умещаются в 2 байта. Бит n (0 — старший бит
-/// первого байта) → `1 << n`. Неиспользуемых битов 0..7, при пустом содержимом — 0, и сами
-/// неиспользуемые биты должны быть нулями (DER).
+/// Бит n (0 = старший бит первого байта) -> `1 << n`. Все биты KeyUsage влезают в 2 байта
 fn key_usage_bits(value: &[u8]) -> R<u16> {
     let (bits, rest) = expect(value, TAG_BIT_STRING)?;
     if !rest.is_empty() {
@@ -345,8 +325,7 @@ struct SubjectAttrs<'a> {
     has_person_attrs: bool,
 }
 
-/// Name ::= SEQUENCE OF RelativeDistinguishedName; RDN ::= SET OF AttributeTypeAndValue.
-/// Принимает содержимое SEQUENCE (без внешнего тега).
+/// `body` без внешнего SEQUENCE от Name
 fn parse_subject(mut body: &[u8]) -> R<SubjectAttrs<'_>> {
     let mut out = SubjectAttrs { org_name: None, org_id: None, country: None, has_person_attrs: false };
     while !body.is_empty() {
@@ -380,7 +359,6 @@ fn parse_subject(mut body: &[u8]) -> R<SubjectAttrs<'_>> {
     Ok(out)
 }
 
-/// UTF8String или PrintableString с проверкой лимита. Другие типы строк не принимаем.
 fn dir_string(value: Tlv<'_>, max_len: usize) -> R<&str> {
     if value.tag != TAG_UTF8_STRING && value.tag != TAG_PRINTABLE_STRING {
         return Err(X509Error::Malformed);
@@ -391,7 +369,6 @@ fn dir_string(value: Tlv<'_>, max_len: usize) -> R<&str> {
     core::str::from_utf8(value.body).map_err(|_| X509Error::Malformed)
 }
 
-/// UTCTime `YYMMDDHHMMSSZ` (50–99 → 19xx, иначе 20xx) или GeneralizedTime `YYYYMMDDHHMMSSZ` → unix.
 fn parse_time(t: Tlv<'_>) -> R<i64> {
     let b = t.body;
     let (year, rest) = match t.tag {
@@ -419,7 +396,7 @@ fn digits(d: &[u8]) -> R<i64> {
     })
 }
 
-/// Дни от 1970-01-01 по григорианскому календарю (алгоритм Хиннанта).
+// days_from_civil Говарда Хиннанта
 fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
     let era = y.div_euclid(400);
@@ -493,7 +470,6 @@ mod tests {
 
     #[test]
     fn detects_pseudonym_as_person_attribute() {
-        // Name с O и organizationIdentifier; с pseudonym (2.5.4.65 = 55 04 41) и без него.
         let rdn = |oid: &[u8], value: &[u8]| {
             let atv = [test_der::tlv(TAG_OID, oid), test_der::tlv(TAG_UTF8_STRING, value)].concat();
             test_der::tlv(TAG_SET, &test_der::tlv(TAG_SEQUENCE, &atv))
@@ -501,7 +477,7 @@ mod tests {
         let org = [rdn(&[0x55, 0x04, 0x0a], b"Acme Robotics"), rdn(&[0x55, 0x04, 0x61], b"NTREE-12345678")].concat();
         let a = parse_subject(&org).unwrap();
         assert_eq!((a.org_name, a.org_id, a.has_person_attrs), (Some("Acme Robotics"), Some("NTREE-12345678"), false));
-        let with_pseudonym = [org, rdn(&[0x55, 0x04, 0x41], b"Mari-7")].concat();
+        let with_pseudonym = [org, rdn(&[0x55, 0x04, 0x41], b"Mari-7")].concat(); // 2.5.4.65
         assert!(parse_subject(&with_pseudonym).unwrap().has_person_attrs);
     }
 
@@ -620,7 +596,7 @@ mod tests {
         }
         let non_critical = test_der::extensions(&[ku.clone(), test_der::extension(OID_UNKNOWN, false, NULL)]);
         assert!(!parse_extensions(&non_critical).unwrap().unknown_critical);
-        // critical FALSE, закодированный явно, читается как «не критично».
+        // явный critical FALSE
         let mut explicit_false = test_der::tlv(TAG_OID, OID_UNKNOWN);
         explicit_false.extend([TAG_BOOLEAN, 0x01, 0x00]);
         explicit_false.extend(test_der::tlv(TAG_OCTET_STRING, NULL));
@@ -709,7 +685,7 @@ mod tests {
 
     #[test]
     fn rejects_field_over_limit() {
-        // O длиной 129 байт: SEQUENCE { SET { SEQUENCE { OID 2.5.4.10, UTF8String(129) } } }
+        // O из 129 байт
         let mut atv = vec![0x06, 0x03, 0x55, 0x04, 0x0a, 0x0c, 0x81, 0x81];
         atv.extend(std::iter::repeat(b'A').take(129));
         let mut set = vec![0x31, 0x81, (atv.len() + 3) as u8, 0x30, 0x81, atv.len() as u8];
@@ -718,12 +694,10 @@ mod tests {
     }
 }
 
-/// DER-конструктор для тестов: собирает расширения и TBS с подменённым хвостом.
 #[cfg(test)]
 pub(crate) mod test_der {
     use super::*;
 
-    /// TLV с длиной в короткой или длинной (до 2 байт) форме.
     pub fn tlv(tag: u8, body: &[u8]) -> Vec<u8> {
         let mut out = vec![tag];
         match body.len() {
@@ -735,7 +709,6 @@ pub(crate) mod test_der {
         out
     }
 
-    /// Extension ::= SEQUENCE { extnID, critical BOOLEAN DEFAULT FALSE, extnValue OCTET STRING }.
     pub fn extension(oid: &[u8], critical: bool, value: &[u8]) -> Vec<u8> {
         let mut body = tlv(TAG_OID, oid);
         if critical {
@@ -745,29 +718,25 @@ pub(crate) mod test_der {
         tlv(TAG_SEQUENCE, &body)
     }
 
-    /// [3] EXPLICIT SEQUENCE OF Extension.
     pub fn extensions(list: &[Vec<u8>]) -> Vec<u8> {
         tlv(TAG_EXTENSIONS, &tlv(TAG_SEQUENCE, &list.concat()))
     }
 
-    /// Значение KeyUsage: BIT STRING с указанным числом неиспользуемых битов.
     pub fn key_usage(unused: u8, bits: &[u8]) -> Vec<u8> {
         tlv(TAG_BIT_STRING, &[&[unused][..], bits].concat())
     }
 
-    /// Значение extKeyUsage: SEQUENCE OF KeyPurposeId (OID).
     pub fn ext_key_usage(purposes: &[&[u8]]) -> Vec<u8> {
         let body: Vec<u8> = purposes.iter().flat_map(|p| tlv(TAG_OID, p)).collect();
         tlv(TAG_SEQUENCE, &body)
     }
 
-    /// Значение BasicConstraints: CA:TRUE — `30 03 01 01 FF`, CA:FALSE — пустой SEQUENCE.
     pub fn basic_constraints(ca: bool) -> Vec<u8> {
         let body: &[u8] = if ca { &[TAG_BOOLEAN, 0x01, 0xff] } else { &[] };
         tlv(TAG_SEQUENCE, body)
     }
 
-    /// TBS, в котором всё после SubjectPublicKeyInfo заменено на `tail`.
+    /// Заменяет всё после SubjectPublicKeyInfo на `tail`
     pub fn replace_extensions(tbs: &[u8], tail: &[u8]) -> Vec<u8> {
         let (seq, _) = read_tlv(tbs).unwrap();
         let spki = parse_tbs(tbs).unwrap().spki;

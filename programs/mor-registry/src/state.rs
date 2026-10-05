@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-/// Единственный админ реестра: добавляет удостоверяющие центры.
+/// Админ реестра, только он добавляет УЦ
 #[account]
 #[derive(InitSpace)]
 pub struct Config {
@@ -10,22 +10,21 @@ pub struct Config {
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
 pub enum TrustKind {
-    /// УЦ с ключом P-256: подпись над сертификатом проверяет прекомпайл secp256r1.
     P256Ca,
-    /// Аттестатор с ключом Ed25519 (НУЦ РК): ключ в первых 32 байтах pubkey, путь register_seal_attested.
+    /// Аттестатор НУЦ РК с ключом Ed25519
     Attestor,
 }
 
-/// Удостоверяющий центр из доверенного списка. PDA: ["trust", spki_hash].
+/// PDA: ["trust", spki_hash]
 #[account]
 #[derive(InitSpace)]
 pub struct TrustService {
     pub kind: TrustKind,
-    /// Сжатый SEC1 (P256Ca) или Ed25519 в первых 32 байтах (Attestor).
+    /// Сжатый SEC1 (P256Ca) или Ed25519 в первых 32 байтах (Attestor)
     pub pubkey: [u8; 33],
-    /// sha256 полного TLV SubjectPublicKeyInfo сертификата УЦ.
+    /// sha256 полного TLV SubjectPublicKeyInfo сертификата УЦ
     pub spki_hash: [u8; 32],
-    /// sha256 полного TLV Name субъекта УЦ — сравнивается с issuer сертификата.
+    /// sha256 полного TLV Name субъекта УЦ, сверяется с issuer сертификата
     pub subject_dn_hash: [u8; 32],
     #[max_len(64)]
     pub name: String,
@@ -33,23 +32,23 @@ pub struct TrustService {
     pub bump: u8,
 }
 
-/// Зарегистрированный сертификат юридического лица. PDA: ["cert", trust_service, serial].
+/// Сертификат юрлица. PDA: ["cert", trust_service, serial]
 #[account]
 #[derive(InitSpace)]
 pub struct Certificate {
     pub trust_service: Pubkey,
-    /// Содержимое DER INTEGER как есть.
+    /// Содержимое DER INTEGER как есть
     #[max_len(20)]
     pub serial: Vec<u8>,
-    /// sha256 полного TLV TBSCertificate.
+    /// sha256 полного TLV TBSCertificate
     pub tbs_hash: [u8; 32],
-    /// Сжатый SEC1 ключ субъекта — им организация будет подписывать Seal.
+    /// Сжатый SEC1, им организация подписывает сообщение печати
     pub subject_key: [u8; 33],
     #[max_len(128)]
     pub org_name: String,
     #[max_len(64)]
     pub org_id: String,
-    /// `[0, 0]`, если атрибута C нет.
+    /// `[0, 0]`, если атрибута C нет
     pub country: [u8; 2],
     pub not_before: i64,
     pub not_after: i64,
@@ -57,7 +56,7 @@ pub struct Certificate {
     pub bump: u8,
 }
 
-/// Что запечатано. Номер варианта — байт в аккаунте и в подписанном сообщении.
+/// Номер варианта пишется байтом в аккаунт и в подписанное сообщение
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
 pub enum AddressKind {
     Wallet,
@@ -65,12 +64,12 @@ pub enum AddressKind {
     Mint,
 }
 
-/// Уровень доверия; больше — сильнее, потребитель сравнивает `>=`.
+/// Больше значит сильнее, потребители сравнивают через `>=`
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
 pub enum TrustLevel {
-    /// Подпись проверил аттестатор вне сети (НУЦ РК).
+    /// Подпись проверена аттестатором вне сети
     Attestor,
-    /// Подпись и сертификат проверены в сети (eIDAS, P-256).
+    /// Подпись и сертификат проверены в сети
     Trustless,
 }
 
@@ -79,23 +78,22 @@ pub enum SubjectType {
     LegalEntity,
 }
 
-/// Печать: кто стоит за адресом. PDA: ["seal", address]. Порядок полей фиксирован — крейт
-/// `mor-verify-seal` читает их по смещениям (спек недели 2, «Аккаунты»).
+/// PDA: ["seal", address]. Порядок полей не менять: `mor-verify-seal` читает их по смещениям
 #[account]
 #[derive(InitSpace)]
 pub struct Seal {
     pub address: Pubkey,
     pub address_kind: AddressKind,
-    /// Кто дал согласие при печати: кошелёк / upgrade authority / mint authority.
+    /// Кошелёк, upgrade authority или mint authority, давший согласие на печать
     pub controller: Pubkey,
     pub trust_level: TrustLevel,
-    /// ISO 3166-1 alpha-2.
+    /// ISO 3166-1 alpha-2
     pub jurisdiction: [u8; 2],
     pub subject_type: SubjectType,
-    /// sha256(salt ‖ jurisdiction ‖ identifier).
+    /// sha256(salt || jurisdiction || identifier)
     pub identifier_hash: [u8; 32],
     pub trust_service: Pubkey,
-    /// PDA Certificate; нули для аттестатора.
+    /// PDA Certificate; нули для аттестатора
     pub certificate: Pubkey,
     pub expires_at: i64,
     pub created_at: i64,

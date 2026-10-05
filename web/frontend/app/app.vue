@@ -34,7 +34,6 @@
 <script setup lang="ts">
 const rpcUrl = useRuntimeConfig().public.rpcUrl
 const route = useRoute()
-// Раздел корпоративных действий: своя шапка и ссылки
 const kase = computed(() => route.path.startsWith('/kase'))
 const referenceMint = useRuntimeConfig().public.kaseReferenceMint
 const links = computed(() => (kase.value

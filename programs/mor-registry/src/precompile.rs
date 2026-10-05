@@ -1,14 +1,12 @@
-//! Разбор данных инструкций прекомпайлов secp256r1 (SIMD-0075) и Ed25519.
+//! Инструкции прекомпайлов secp256r1 (SIMD-0075) и Ed25519
 //!
-//! Раскладка у обоих одна: `num_signatures: u8`, `padding: u8`, затем `num_signatures` структур
-//! смещений по 14 байт (7 × u16 LE: signature_offset, signature_instruction_index,
-//! public_key_offset, public_key_instruction_index, message_offset, message_length,
-//! message_instruction_index), затем произвольные данные. Индекс `0xFFFF` означает
-//! «эта же инструкция». Ключ secp256r1 — 33 байта сжатый SEC1, Ed25519 — 32 байта.
+//! Раскладка у обоих: `num_signatures: u8`, `padding: u8`, затем по 14 байт смещений на подпись
+//! (7 x u16 LE: signature_offset, signature_instruction_index, public_key_offset,
+//! public_key_instruction_index, message_offset, message_length, message_instruction_index),
+//! затем данные. Индекс `0xFFFF` означает эту же инструкцию
 //!
-//! Программа принимает только самодостаточную инструкцию с одной подписью и читает
-//! ключ и сообщение ровно по тем смещениям, по которым их проверил прекомпайл.
-//! Так нельзя подменить проверенные байты на другие.
+//! Берём только самодостаточную инструкцию с одной подписью и читаем ключ и сообщение ровно
+//! по тем смещениям, что проверил прекомпайл, иначе проверенные байты можно подменить
 
 use anchor_lang::prelude::*;
 use solana_instructions_sysvar::{load_current_index_checked, load_instruction_at_checked};
@@ -29,7 +27,6 @@ pub struct VerifiedSignature<'a> {
     pub message: &'a [u8],
 }
 
-/// Данные инструкции прямо перед текущей; её программа должна быть `precompile`.
 pub fn previous_instruction_data(ix_sysvar: &AccountInfo, precompile: &Pubkey) -> Result<Vec<u8>> {
     let current = load_current_index_checked(ix_sysvar)? as usize;
     require!(current > 0, MorError::PrecompileMissing);
@@ -53,8 +50,7 @@ pub fn parse_self_contained(data: &[u8], key_len: usize) -> Result<VerifiedSigna
 
     let slice = |off: u16, len: usize| -> Result<&[u8]> {
         let start = off as usize;
-        // Overflow is impossible by construction: u16 offset + u16-derived length on 64-bit usize.
-        // This check is kept as a defensive guard.
+        // u16 + u16 в usize не переполнится, checked_add просто для страховки
         let end = start.checked_add(len).ok_or(MorError::PrecompileMalformed)?;
         data.get(start..end).ok_or_else(|| error!(MorError::PrecompileMalformed))
     };
@@ -78,7 +74,7 @@ mod tests {
         }
     }
 
-    /// [num][pad][7 × u16 LE][payload]
+    /// [num][pad][7 x u16 LE][payload]
     fn data(num: u8, offsets: [u16; 7], payload: &[u8]) -> Vec<u8> {
         let mut d = vec![num, 0];
         for v in offsets {

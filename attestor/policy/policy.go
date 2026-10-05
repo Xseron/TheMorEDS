@@ -1,6 +1,5 @@
-// Package policy решает по полям сертификата подписанта, может ли он запечатать адрес от
-// имени юрлица. Читает только O, OU, EKU и сроки; ФИО и ИИН (CN, SN, GN, serialNumber)
-// не трогает. Подпись и цепочку здесь не проверяют — это сделала KalkanCrypt.
+// Package policy решает, может ли подписант запечатать адрес от имени юрлица. ФИО и ИИН
+// (CN, SN, GN, serialNumber) не читает, подпись и цепочку уже проверила KalkanCrypt
 package policy
 
 import (
@@ -11,14 +10,14 @@ import (
 	"unicode/utf8"
 )
 
-// Роли НУЦ РК в extKeyUsage.
+// Роли НУЦ РК в extKeyUsage
 const (
 	OIDLegalEntity     = "1.2.398.3.3.4.1.2"
 	OIDFirstHead       = "1.2.398.3.3.4.1.2.1"
 	OIDSigningEmployee = "1.2.398.3.3.4.1.2.2"
 )
 
-// Коды отказа — те же строки, что в ответе аттестатора.
+// Коды отказа уходят в ответ аттестатора как есть
 const (
 	CertNotValidNow = "cert_not_valid_now"
 	NotLegalEntity  = "not_legal_entity"
@@ -29,16 +28,14 @@ const (
 
 const maxNameLen = 128 // как seal.MaxNameLen
 
-// Denied — отказ политики; Code — код для ответа.
 type Denied struct{ Code string }
 
 func (d *Denied) Error() string { return "policy: " + d.Code }
 
-// Fields — поля сертификата, которые смотрит политика.
 type Fields struct {
 	EKU           []string // OID через точку
-	Organizations []string // значения O
-	OrgUnits      []string // значения OU
+	Organizations []string
+	OrgUnits      []string
 	NotBefore     time.Time
 	NotAfter      time.Time
 }
@@ -56,7 +53,7 @@ func FromCertificate(c *x509.Certificate) Fields {
 	return f
 }
 
-// Subject — кто стоит за подписью: название и БИН организации, конец сертификата.
+// Subject описывает организацию за подписью
 type Subject struct {
 	Name     string
 	BIN      string

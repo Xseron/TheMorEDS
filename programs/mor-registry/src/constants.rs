@@ -8,16 +8,14 @@ pub const TRUST_SEED: &[u8] = b"trust";
 pub const CERT_SEED: &[u8] = b"cert";
 #[constant]
 pub const SEAL_SEED: &[u8] = b"seal";
-/// Префикс подписываемого сообщения печати: отличает его от DER (0x30/0x31) и TLS-контекстов.
+/// Чтобы сообщение печати нельзя было выдать за DER (0x30/0x31) или TLS-контекст
 pub const SEAL_TAG: &[u8] = b"MOR-SEAL-V1";
 pub const MAX_SEAL_NAME_LEN: usize = 128;
 
 pub const TOKEN_PROGRAM_ID: Pubkey = pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 pub const TOKEN_2022_PROGRAM_ID: Pubkey = pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
-/// Прекомпайл проверки подписей P-256 (SIMD-0075).
 pub const SECP256R1_PROGRAM_ID: Pubkey = pubkey!("Secp256r1SigVerify1111111111111111111111111");
-/// Прекомпайл проверки подписей Ed25519 (путь аттестатора).
 pub const ED25519_PROGRAM_ID: Pubkey = pubkey!("Ed25519SigVerify111111111111111111111111111");
 
 pub const MAX_SERIAL_LEN: usize = 20;
@@ -25,7 +23,7 @@ pub const MAX_NAME_LEN: usize = 64;
 pub const MAX_ORG_NAME_LEN: usize = 128;
 pub const MAX_ORG_ID_LEN: usize = 64;
 
-// DER-кодировки OID без тега и длины.
+// DER-кодировки OID без тега и длины
 pub const OID_ECDSA_WITH_SHA256: &[u8] = &[0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x02]; // 1.2.840.10045.4.3.2
 pub const OID_EC_PUBLIC_KEY: &[u8] = &[0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01]; // 1.2.840.10045.2.1
 pub const OID_PRIME256V1: &[u8] = &[0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07]; // 1.2.840.10045.3.1.7
@@ -37,20 +35,17 @@ pub const OID_GIVEN_NAME: &[u8] = &[0x55, 0x04, 0x2a]; // 2.5.4.42
 pub const OID_SERIAL_NUMBER: &[u8] = &[0x55, 0x04, 0x05]; // 2.5.4.5
 pub const OID_PSEUDONYM: &[u8] = &[0x55, 0x04, 0x41]; // 2.5.4.65
 
-// Расширения X.509 (RFC 5280 §4.2.1).
 pub const OID_KEY_USAGE: &[u8] = &[0x55, 0x1d, 0x0f]; // 2.5.29.15
 pub const OID_BASIC_CONSTRAINTS: &[u8] = &[0x55, 0x1d, 0x13]; // 2.5.29.19
 pub const OID_EXT_KEY_USAGE: &[u8] = &[0x55, 0x1d, 0x25]; // 2.5.29.37
 pub const OID_CERT_POLICIES: &[u8] = &[0x55, 0x1d, 0x20]; // 2.5.29.32
 pub const OID_SUBJECT_ALT_NAME: &[u8] = &[0x55, 0x1d, 0x11]; // 2.5.29.17
 
-// Назначения ключа (extKeyUsage, RFC 5280 §4.2.1.12), запрещённые для печатей: TLS 1.2 сервер
-// подписывает client_random, выбранный посторонним; TSA и OCSP подписывают чужие данные.
+// Запрещены для печатей: TLS 1.2 сервер подписывает чужой client_random, а TSA и OCSP подписывают чужие данные
 pub const OID_KP_SERVER_AUTH: &[u8] = &[0x2b, 0x06, 0x01, 0x05, 0x05, 0x07, 0x03, 0x01]; // 1.3.6.1.5.5.7.3.1
 pub const OID_KP_TIME_STAMPING: &[u8] = &[0x2b, 0x06, 0x01, 0x05, 0x05, 0x07, 0x03, 0x08]; // 1.3.6.1.5.5.7.3.8
 pub const OID_KP_OCSP_SIGNING: &[u8] = &[0x2b, 0x06, 0x01, 0x05, 0x05, 0x07, 0x03, 0x09]; // 1.3.6.1.5.5.7.3.9
 
-// Биты KeyUsage: именованный бит n — это 1 << n.
 pub const KU_DIGITAL_SIGNATURE: u16 = 1 << 0;
 pub const KU_NON_REPUDIATION: u16 = 1 << 1; // contentCommitment
 pub const KU_KEY_CERT_SIGN: u16 = 1 << 5;

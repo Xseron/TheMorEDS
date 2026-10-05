@@ -25,7 +25,7 @@
 
           <li v-if="wallet && existing === null && !done" class="card-white">
             <h2 id="step-method" class="h3">2. Attestation</h2>
-            <!-- Настоящие радиокнопки под прозрачным слоем: клавиатура, getByLabel и check() работают как раньше -->
+            <!-- Настоящие радиокнопки под прозрачным слоем, чтобы работали клавиатура, getByLabel и check() -->
             <div role="radiogroup" aria-labelledby="step-method" class="mt-4 flex flex-wrap gap-2">
               <label class="btn relative flex-[1_1_18rem]" :class="{ 'btn-primary': mode === 'nca' }"><input v-model="mode" type="radio" name="method" value="nca" class="toggle"> NCA of Kazakhstan (NCALayer)</label>
               <label class="btn relative flex-[1_1_18rem]" :class="{ 'btn-primary': mode === 'test' }"><input v-model="mode" type="radio" name="method" value="test" class="toggle"> Test attestor (demo)</label>

@@ -36,7 +36,7 @@ pub fn handle_add_trust_service(
 ) -> Result<()> {
     match kind {
         TrustKind::P256Ca => require!(pubkey[0] == 0x02 || pubkey[0] == 0x03, MorError::UntrustedKey),
-        // Ed25519-ключ в первых 32 байтах; сид PDA — sha256 ключа; DN у аттестатора нет.
+        // Ed25519-ключ в первых 32 байтах, сид PDA = sha256 ключа, DN у аттестатора нет
         TrustKind::Attestor => require!(
             pubkey[32] == 0 && spki_hash == hash(&pubkey[..32]).to_bytes() && subject_dn_hash == [0u8; 32],
             MorError::BadAttestorKey

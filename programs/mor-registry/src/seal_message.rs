@@ -1,6 +1,5 @@
-//! Сообщение, которое подписывает организация (или аттестатор), чтобы запечатать адрес.
-//! Раскладка фиксирована спеком недели 2 («Подписываемое сообщение»); её же собирают TS-клиент
-//! и Go-аттестатор, поэтому поля не меняются без новой версии тега.
+//! Сообщение, которое подписывает организация или аттестатор, чтобы запечатать адрес
+//! Те же байты собирают TS-клиент и Go-аттестатор: раскладку меняем только с новой версией тега
 
 use anchor_lang::prelude::*;
 use solana_sha256_hasher::hashv;
@@ -16,14 +15,14 @@ pub struct SealMessage<'a> {
     pub controller: &'a Pubkey,
     pub trust_level: TrustLevel,
     pub trust_service: &'a Pubkey,
-    /// Нули для аттестатора.
+    /// Нули для аттестатора
     pub certificate: &'a Pubkey,
     pub jurisdiction: [u8; 2],
     pub subject_type: SubjectType,
     pub identifier_hash: &'a [u8; 32],
     pub expires_at: i64,
     pub sign_deadline: i64,
-    /// 1..=128 байт UTF-8; длину проверяет вызывающий.
+    /// 1..=128 байт UTF-8; длину проверяет вызывающий
     pub name: &'a str,
 }
 
@@ -49,8 +48,7 @@ impl SealMessage<'_> {
     }
 }
 
-/// `sha256(salt ‖ jurisdiction ‖ identifier)`: идентификатор организации без раскрытия,
-/// владелец показывает (identifier, salt) контрагенту вне сети.
+/// Прячет идентификатор организации; владелец раскрывает (identifier, salt) контрагенту вне сети
 pub fn identifier_hash(salt: &[u8; 32], jurisdiction: [u8; 2], identifier: &str) -> [u8; 32] {
     hashv(&[salt, &jurisdiction, identifier.as_bytes()]).to_bytes()
 }
@@ -59,7 +57,6 @@ pub fn identifier_hash(salt: &[u8; 32], jurisdiction: [u8; 2], identifier: &str)
 mod tests {
     use super::*;
 
-    /// Смещения — из спека недели 2; их же используют TS-клиент и Go-аттестатор.
     #[test]
     fn layout_matches_spec_offsets() {
         let (address, controller) = (Pubkey::new_from_array([1; 32]), Pubkey::new_from_array([2; 32]));
@@ -93,11 +90,11 @@ mod tests {
         assert_eq!(&m[176..208], &[5; 32]);
         assert_eq!(&m[208..216], &0x0102_0304_0506_0708i64.to_le_bytes());
         assert_eq!(&m[216..224], &[0xff; 8]);
-        // Длина — в байтах UTF-8, не в символах.
+        // Длина в байтах UTF-8, не в символах
         assert_eq!(m[224] as usize, name.len());
         assert_eq!(&m[225..], name.as_bytes());
 
-        // Эталон из спека аттестатора (неделя 3): Go-аттестатор сверяет свои байты с тем же hex.
+        // Go-аттестатор сверяет свои байты с этим же hex
         let hex: String = m.iter().map(|b| format!("{b:02x}")).collect();
         assert_eq!(
             hex,

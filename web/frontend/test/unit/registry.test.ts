@@ -80,7 +80,7 @@ describe('parseAddress', () => {
   })
 })
 
-// Эталон из спеки аттестатора: layout_matches_spec_offsets, 250 байт
+// Тот же вектор, что в Rust-тесте layout_matches_spec_offsets, 250 байт
 const VECTOR
   = '4d4f522d5345414c2d5631afe3ef75354d140f003334108037ea07df2cfdad47b65d62fa7a5d78f63d0fb0'
     + '0101010101010101010101010101010101010101010101010101010101010101' + '02'

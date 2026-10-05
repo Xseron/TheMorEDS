@@ -95,7 +95,7 @@ async function main() {
   if (await account(sealAPda)) console.log('A already sealed', sealAPda);
   else await sealA('register_seal_p256 (A, eIDAS)');
 
-  // В сеть попадает только sha256(соль ‖ KZ ‖ БИН)
+  // В сеть попадает только sha256(соль || KZ || БИН)
   const sealB = await sealOf(b.address);
   if (await account(sealB)) console.log('B already sealed', sealB);
   else {

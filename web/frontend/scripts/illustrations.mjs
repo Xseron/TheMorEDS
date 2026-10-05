@@ -12,7 +12,7 @@ const outDir = join(root, 'public', 'img')
 
 const LILAC = '#ede7f7'
 const VIOLET_HUE = 263
-// верхняя граница светлого серого: #f8f8f7 (светлота 0.9706) — тот же серый, что был фоном government.svg
+// чуть выше #f8f8f7 (светлота 0.9706): этот серый был фоном government.svg
 const GREY_MAX_L = 0.975
 // светлые серые здесь поверхности (лист, стойка), а не пятно: они остаются белыми
 const GREY_TARGET = {
@@ -26,8 +26,6 @@ const WHITE_DETAIL_TARGET = { 'step-sign.svg': LILAC, 'step-verify.svg': LILAC }
 const EDGE = 0.01 // допуск касания края холста, доля от размера
 
 const kb = n => (n / 1024).toFixed(1).padStart(6) + ' KB'
-
-// Цвета
 
 function parseColor(value) {
   if (!value) return null
@@ -89,8 +87,6 @@ function recolor(svg, greyTarget = LILAC) {
   return { svg: out, stats }
 }
 
-// Фон
-
 const ELEMENT = /<defs\b[\s\S]*?<\/defs>|<[a-zA-Z][^>]*\/>/g
 
 function attr(tag, name) {
@@ -98,8 +94,8 @@ function attr(tag, name) {
   return m ? m[1] : null
 }
 
-// Рамка по всем координатам пути, контрольные точки включены: для касания края хватает.
-// Recraft отдаёт только абсолютные M, L, C, Z.
+// Рамка по всем координатам пути вместе с контрольными точками, для проверки касания края хватает
+// Recraft отдаёт только абсолютные M, L, C, Z
 function pathBox(d) {
   if (!/^[MLCHVZ\d\s.,eE+-]*$/.test(d)) return null
   const xs = []
@@ -147,10 +143,9 @@ function liftWhiteDetails(svg, target) {
   return { svg: out, count }
 }
 
-// Recraft кладёт слои друг на друга: внизу сплошной слой цвета контура, поверх куски
-// белого фона с вырезом по силуэту. Если просто убрать белые куски, контурный слой
-// закроет весь холст. Поэтому белый кусок превращается в ластик: всё, что нарисовано
-// под ним, получает маску «холст минус этот кусок». Картинка на белом остаётся прежней.
+// Recraft рисует снизу сплошной слой цвета контура, а поверх белые куски фона с вырезом
+// по силуэту. Если белое просто выкинуть, контурный слой закроет весь холст, поэтому
+// всё, что под белым куском, получает маску "холст минус этот кусок"
 function removeBackground(svg) {
   const open = /<svg\b[^>]*>/.exec(svg)
   const vb = open && /viewBox\s*=\s*"([^"]+)"/.exec(open[0])
@@ -202,8 +197,6 @@ function removeBackground(svg) {
   return { svg: `${head}${masks ? `<defs>${masks}</defs>` : ''}${acc.join('')}</svg>`, removed, masked }
 }
 
-// Сжатие
-
 function compress(svg) {
   return optimize(svg, {
     multipass: true,
@@ -212,7 +205,6 @@ function compress(svg) {
   }).data
 }
 
-// Только svgo: холст, фон и цвета остаются как в исходнике
 function publishAsIs(src, name) {
   const raw = readFileSync(src, 'utf8')
   const out = compress(raw)
@@ -220,7 +212,7 @@ function publishAsIs(src, name) {
   return { before: Buffer.byteLength(raw), after: Buffer.byteLength(out) }
 }
 
-// Знак: svg публикуется как есть (цвета выбирает автор). Растровый знак 128 px и favicon 16/32/48 берутся из assets-src/mark.png через Pillow
+// mark.svg кладём как есть, а png 128 px и favicon 16/32/48 режем из assets-src/mark.png через Pillow
 const MARK_PY = `
 import sys
 from PIL import Image
@@ -247,8 +239,6 @@ function buildMark() {
   }
   console.warn('! Python с Pillow не найден, знак и favicon не обновлены')
 }
-
-// Запуск
 
 mkdirSync(outDir, { recursive: true })
 let totalBefore = 0

@@ -2,8 +2,7 @@ use anchor_lang::prelude::*;
 
 use crate::{constants::*, error::MorError, state::Config};
 
-/// Создать Config. Разрешено только upgrade authority программы:
-/// иначе первый встречный после деплоя стал бы админом.
+/// Только upgrade authority, иначе админом стал бы первый встречный после деплоя
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(mut)]

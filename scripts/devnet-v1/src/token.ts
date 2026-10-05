@@ -4,7 +4,7 @@ import { concat, discriminator, SYSTEM_PROGRAM, u32le } from './anchor.js';
 export const TOKEN_2022 = address('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
 export const ATA_PROGRAM = address('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
 /** Минт Token-2022 с одним расширением TransferHook: база 82 байта, добивка до 165, тип аккаунта (1),
- *  TLV-заголовок (4), данные расширения (authority 32 + program_id 32). */
+ *  TLV-заголовок (4), данные расширения (authority 32 + program_id 32) */
 export const MINT_WITH_HOOK_LEN = 234;
 
 const bytes = (a: Address) => new Uint8Array(getAddressEncoder().encode(a));
@@ -15,7 +15,7 @@ export function u64le(n: bigint): Uint8Array {
   return b;
 }
 
-/** SystemInstruction::CreateAccount (0). Подпись нового аккаунта добавляет addSignersToInstruction. */
+/** SystemInstruction::CreateAccount (0). Подпись нового аккаунта добавляет addSignersToInstruction */
 export function createAccountInstruction(payer: Address, account: Address, lamports: bigint, space: number, owner: Address): Instruction {
   return {
     programAddress: SYSTEM_PROGRAM,
@@ -27,7 +27,7 @@ export function createAccountInstruction(payer: Address, account: Address, lampo
   };
 }
 
-/** SystemInstruction::Transfer (2). */
+/** SystemInstruction::Transfer (2) */
 export function transferSolInstruction(from: Address, to: Address, lamports: bigint): Instruction {
   return {
     programAddress: SYSTEM_PROGRAM,
@@ -39,7 +39,7 @@ export function transferSolInstruction(from: Address, to: Address, lamports: big
   };
 }
 
-/** TransferHookExtension (36) / Initialize (0): authority и program_id — OptionalNonZeroPubkey. */
+/** TransferHookExtension (36) / Initialize (0): authority и program_id как OptionalNonZeroPubkey */
 export function initializeTransferHookInstruction(mint: Address, authority: Address, hookProgram: Address): Instruction {
   return {
     programAddress: TOKEN_2022,
@@ -48,7 +48,7 @@ export function initializeTransferHookInstruction(mint: Address, authority: Addr
   };
 }
 
-/** InitializeMint2 (20): decimals, mint_authority, freeze_authority = None. */
+/** InitializeMint2 (20): decimals, mint_authority, freeze_authority = None */
 export function initializeMint2Instruction(mint: Address, decimals: number, mintAuthority: Address): Instruction {
   return {
     programAddress: TOKEN_2022,
@@ -57,7 +57,7 @@ export function initializeMint2Instruction(mint: Address, decimals: number, mint
   };
 }
 
-/** Associated Token Account: CreateIdempotent (1). */
+/** Associated Token Account: CreateIdempotent (1) */
 export function createAtaIdempotentInstruction(payer: Address, ata: Address, owner: Address, mint: Address): Instruction {
   return {
     programAddress: ATA_PROGRAM,
@@ -73,7 +73,7 @@ export function createAtaIdempotentInstruction(payer: Address, ata: Address, own
   };
 }
 
-/** MintTo (7): хук не вызывается — эмитент чеканит свободно. */
+/** MintTo (7): хук не вызывается */
 export function mintToInstruction(mint: Address, destination: Address, authority: Address, amount: bigint): Instruction {
   return {
     programAddress: TOKEN_2022,
@@ -86,7 +86,7 @@ export function mintToInstruction(mint: Address, destination: Address, authority
   };
 }
 
-/** TransferChecked (12) и дополнительные аккаунты хука (только чтение; Token-2022 находит их по ключам). */
+/** TransferChecked (12) + аккаунты хука, read-only: Token-2022 находит их по ключам */
 export function transferCheckedInstruction(
   source: Address,
   mint: Address,
@@ -109,7 +109,7 @@ export function transferCheckedInstruction(
   };
 }
 
-/** sealed-transfer: initialize(min_trust_level) — подписывает mint authority. */
+/** sealed-transfer initialize(min_trust_level), подписывает mint authority */
 export function hookInitializeInstruction(
   hookProgram: Address,
   authority: Address,

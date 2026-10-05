@@ -1,4 +1,4 @@
-// Демо-инвесторы: три ключа в localStorage этого браузера, печати тестового аттестатора. Ничего не защищают.
+// Демо-инвесторы: три ключа в localStorage этого браузера, печати тестового аттестатора. Ничего не защищают
 import { attestWithTestKey, registerInstructions } from '~/utils/attestation'
 import { transferSolInstruction } from '~/utils/bond'
 import { demoWallet } from '~/utils/demoWallet'
@@ -23,7 +23,6 @@ export function useInvestors() {
     return wallets.value
   }
 
-  /** SOL от подключённого кошелька и печать тестового аттестатора тем, у кого её ещё нет */
   async function prepare(onStep: (text: string) => void) {
     const list = await load()
     const balances = await Promise.all(list.map(w => rpc.getBalance(w.address).send().then(r => r.value)))

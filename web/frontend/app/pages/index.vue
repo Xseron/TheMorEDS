@@ -1,6 +1,5 @@
 <template>
   <div class="space-y-20 md:space-y-28">
-    <!-- 1. Hero -->
     <section>
       <div class="grid grid-cols-1 items-center gap-x-12 gap-y-8 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         <div>
@@ -30,7 +29,6 @@
       </div>
     </section>
 
-    <!-- 2. The wallet identity gap -->
     <section>
       <div class="grid grid-cols-1 items-center gap-x-16 gap-y-10 md:grid-cols-2">
         <div>
@@ -48,7 +46,6 @@
       <p class="note mt-6">Sources checked on 3 October 2026. This is not legal advice</p>
     </section>
 
-    <!-- 3. Who it's for -->
     <section class="band -mx-5 rounded-none px-5 py-12 sm:mx-0 sm:rounded-card sm:p-8 md:p-12">
       <p class="eyebrow">Use cases</p>
       <h2 class="mt-3 text-balance">Who it's for</h2>
@@ -77,7 +74,6 @@
       <p class="note mt-8">First users: corporate wallets with electronic signatures. Kazakhstan comes first, then compatible EU organization certificates</p>
     </section>
 
-    <!-- 4. Alatau City -->
     <section>
       <div class="grid grid-cols-1 items-center gap-x-16 gap-y-8 md:grid-cols-2">
         <div>
@@ -97,7 +93,6 @@
       <Notes :items="notes.slice(6, 8)" class="md:columns-2" />
     </section>
 
-    <!-- 5. How it works -->
     <section class="band -mx-5 rounded-none px-5 py-12 sm:mx-0 sm:rounded-card sm:p-8 md:p-12">
       <p class="eyebrow">Mechanism</p>
       <h2 class="mt-3 text-balance">How it works</h2>
@@ -117,7 +112,6 @@
       </div>
     </section>
 
-    <!-- 6. For the city -->
     <section class="grid grid-cols-1 items-center gap-x-16 gap-y-10 md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
       <Illustration src="/img/city.svg" alt="" ratio="1/1" class="mx-auto w-full max-w-[26rem]" />
       <div>
@@ -131,7 +125,6 @@
       </div>
     </section>
 
-    <!-- 7. Existing approaches and MOR -->
     <section>
       <h2 class="text-balance">Existing approaches and MOR</h2>
       <div class="mt-6 max-w-[66ch] space-y-4">
@@ -159,7 +152,6 @@
       <Notes :items="notes.slice(8, 9)" class="max-w-[66ch]" />
     </section>
 
-    <!-- 8. Roadmap -->
     <section class="band -mx-5 rounded-none px-5 py-12 sm:mx-0 sm:rounded-card sm:p-8 md:p-12">
       <h2 class="text-balance">Roadmap</h2>
       <p class="mt-4"><b>Now:</b> company-wallet registry and Token-2022 demo on Solana devnet</p>
@@ -174,7 +166,6 @@
       <p class="note mt-2">Targets depend on pilot access, regulatory requirements and security review</p>
     </section>
 
-    <!-- 9. Team -->
     <section>
       <h2 class="text-balance">Team</h2>
       <p class="mt-4">Both founders study Information Systems at KBTU</p>
@@ -188,7 +179,6 @@
       </div>
     </section>
 
-    <!-- 10. Questions -->
     <section class="grid grid-cols-1 gap-x-16 gap-y-8 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
       <h2 class="text-balance">Questions</h2>
       <div class="max-w-[66ch] border-t border-line">
@@ -218,7 +208,7 @@ const faq = [
   { q: 'Is MOR live on mainnet?', a: 'Not yet. The registry and the demo token run on Solana devnet, and the certificate authority and attestor use public test keys, so anyone can mint such seals. Mainnet readiness is planned for months 5 to 6 of the roadmap' },
 ]
 
-// Шаблон сайта дописывает « | MOR», поэтому заголовок без названия в начале (copy.md, Meta)
+// " | MOR" шаблон сайта допишет сам, поэтому в title названия нет
 useSeoMeta({
   title: 'On-chain KYC for companies on Solana',
   description: 'MOR links a company to a Solana wallet with its electronic signature. Check who stands behind an address, seal your wallet, try the sealed transfer',

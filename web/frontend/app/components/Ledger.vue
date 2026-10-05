@@ -51,7 +51,6 @@ const rows = [
 ]
 const withSeals = ref(false)
 
-// Без печатей виден только адрес; с печатями название жирным или «no seal», адрес под ним.
 // key меняется вместе с режимом, span пересоздаётся и проигрывает смену прозрачности
 const Party = defineComponent({
   props: { side: { type: Object as PropType<Side>, required: true }, sealed: Boolean },

@@ -23,7 +23,7 @@ export async function requestDrip(url: string, address: string, fetchFn: typeof 
     const res = await fetchFn(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address }) })
     body = await res.json()
   } catch {
-    // Сеть, CORS или не JSON (страница nginx вместо сервиса): для посетителя всё это «кран недоступен»
+    // Сеть, CORS или не JSON (страница nginx вместо сервиса): для посетителя всё это "кран недоступен"
     throw new DripError('unreachable')
   }
   if (body?.ok) return body.already ? { already: true } : { already: false, signature: body.signature }

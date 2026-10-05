@@ -1,4 +1,4 @@
-// Чистые кодеки реестра Mör: адреса, PDA, разбор аккаунтов. Без сети и без Nuxt.
+// Чистые кодеки реестра Mör: адреса, PDA, разбор аккаунтов. Без сети и без Nuxt
 import {
   address, getAddressDecoder, getAddressEncoder, getProgramDerivedAddress,
   type Address, AccountRole, type Instruction,
@@ -18,7 +18,7 @@ export const ZERO_ADDRESS = SYSTEM_PROGRAM
 export const ED25519_PROGRAM = address('Ed25519SigVerify111111111111111111111111111')
 export const INSTRUCTIONS_SYSVAR = address('Sysvar1nstructions1111111111111111111111111')
 
-// Демо-кошельки devnet: эмитент токена, A (Acme, eIDAS), B (ТОО «Ромашка», аттестатор), C (без печати)
+// Демо-кошельки devnet: эмитент токена, A (Acme, eIDAS), B (ТОО "Ромашка", аттестатор), C (без печати)
 export const DEMO = {
   issuer: address('8sK9npgzVtDYKbjeLxvLV2wSKM9QkuuGf15uiqfbqwUF'),
   a: address('DERFemCQSFg6G5QDQDL7mvYonpz1PZAa3ySbYxCD5GmF'),

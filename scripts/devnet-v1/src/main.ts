@@ -30,7 +30,6 @@ import * as ix from './anchor.js';
 const ROOT = join(import.meta.dirname, '..', '..', '..');
 const RPC = process.env.RPC_URL ?? 'https://api.devnet.solana.com';
 const WS = process.env.WS_URL ?? 'wss://api.devnet.solana.com';
-// Адрес программы публичный: секретный keypair программы для этого не нужен.
 const PROGRAM_ID = process.env.PROGRAM_ID ?? 'CqbwC3DF4APG6cjRneir1UPuBbh49ttBrKasfc5QP1aP';
 const EE_CERT = join(ROOT, 'fixtures/ee_large.der');
 
@@ -38,8 +37,8 @@ const sha256 = (b: Uint8Array) => new Uint8Array(createHash('sha256').update(b).
 const loadKeypair = (p: string) => createKeyPairSignerFromBytes(new Uint8Array(JSON.parse(readFileSync(p, 'utf8'))));
 
 async function main() {
-  // TBS едет в транзакции целиком, и даже отклонённая программой транзакция остаётся в леджере.
-  // Поэтому subject проверяется здесь, до любого RPC-запроса; NaturalPersonCert в программе — страховка.
+  // TBS попадает в леджер даже из отклонённой транзакции, поэтому subject проверяем до
+  // любого RPC. NaturalPersonCert в программе только страховка
   const ee = parseCertificate(new Uint8Array(readFileSync(EE_CERT)));
   const violation = subjectPolicyViolation(ee.subject);
   if (violation) {
@@ -63,7 +62,7 @@ async function main() {
   const config = await pda(['config']);
   const programData = await pda([new Uint8Array(enc.encode(program))], ix.BPF_LOADER_UPGRADEABLE);
 
-  // Транзакции v0 для админских шагов; v1 — только для регистрации.
+  // v0 для админских шагов, v1 только для регистрации
   async function sendV0(label: string, instructions: Instruction[]) {
     const { value: blockhash } = await rpc.getLatestBlockhash().send();
     const tx = await signTransactionMessageWithSigners(
@@ -74,18 +73,14 @@ async function main() {
         (m) => appendTransactionMessageInstructions(instructions, m),
       ),
     );
-    // signTransactionMessageWithSigners types the lifetime as blockhash | durable-nonce; we only
-    // ever build blockhash-lifetime messages here, so the runtime shape always satisfies
-    // sendAndConfirmTransactionFactory's narrower (blockhash-only) parameter type.
+    // Lifetime у нас всегда blockhash, поэтому каст безопасен
     await sendAndConfirm(tx as Parameters<typeof sendAndConfirm>[0], { commitment: 'confirmed' });
     console.log(`${label}: ${getSignatureFromTransaction(tx)}`);
   }
 
-  // 1. initialize
   if (await exists(config)) console.log('config already initialized');
   else await sendV0('initialize', [ix.initializeInstruction(program, payer.address, config, programData)]);
 
-  // 2. add_trust_service для ca1
   const ca = parseCertificate(new Uint8Array(readFileSync(join(ROOT, 'fixtures/ca1.der'))));
   const caPubkey = compressP256(ca.publicKey);
   const spkiHash = sha256(ca.spki);
@@ -102,7 +97,6 @@ async function main() {
       }),
     ]);
 
-  // 3. register_certificate большого сертификата v1-транзакцией (subject проверен в начале main)
   const certificate = await pda(['cert', new Uint8Array(enc.encode(trustService)), ee.serial]);
   if (await exists(certificate)) {
     console.log('certificate already registered', certificate);
@@ -120,7 +114,7 @@ async function main() {
           ],
           m,
         ),
-      // В v1 лимиты живут в конфиге сообщения; незаданные равны нулю, а не значениям по умолчанию.
+      // В v1 незаданные лимиты равны нулю, а не дефолтам
       (m) =>
         setTransactionMessageConfig(
           {
@@ -136,7 +130,7 @@ async function main() {
     const size = getTransactionEncoder().encode(tx).length;
     console.log(`v1 transaction: ${size} bytes (TBS ${ee.tbs.length} bytes)`);
     if (size <= 1232) throw new Error('expected a transaction larger than the legacy limit');
-    // Preflight-симуляция остаётся включённой: skipPreflight не передаём.
+    // Preflight не отключаем
     await sendAndConfirm(tx as Parameters<typeof sendAndConfirm>[0], { commitment: 'confirmed' });
     const sig = getSignatureFromTransaction(tx);
     console.log(`register_certificate: ${sig}`);

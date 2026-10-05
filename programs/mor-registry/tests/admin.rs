@@ -30,7 +30,7 @@ fn initialize_rejects_non_upgrade_authority() {
 fn initialize_twice_fails_and_keeps_admin() {
     let mut env = Env::new();
     env.initialize().unwrap();
-    // Даже upgrade authority не может пересоздать Config: аккаунт уже существует.
+    // Даже upgrade authority не может пересоздать Config: аккаунт уже существует
     let res = env.initialize();
     match res {
         Err(e) => assert!(

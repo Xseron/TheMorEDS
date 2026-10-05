@@ -1,7 +1,6 @@
-// Печать демо-кошелька D через Go-аттестатор НУЦ РК (attestor/).
-//   npm run devnet:attest -- request         — создаёт D и пишет текст запроса в ~/.config/solana/mor-demo/d-request.txt
-//   npm run devnet:attest -- submit <файл>   — по ответу аттестатора (JSON): v1-транзакция [Ed25519, register_seal_attested]
-//                                              от D, затем перевод демо-токена на D — хук его пропускает
+// Печать демо-кошелька D через аттестатор НУЦ РК (attestor/)
+//   npm run devnet:attest -- request        текст запроса для D в ~/.config/solana/mor-demo/d-request.txt
+//   npm run devnet:attest -- submit <файл>  по JSON-ответу аттестатора: печать D и перевод демо-токена на D
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { address, getAddressEncoder, type Address } from '@solana/kit';
@@ -12,7 +11,7 @@ import { DEMO, PROGRAM_ID, connect, demoKey, sha256, utf8 } from './devnet.js';
 const DAY = 86_400n;
 const REQUEST = join(DEMO, 'd-request.txt');
 
-/** Ответ POST /v1/attest. */
+/** Ответ POST /v1/attest */
 type AttestResponse = {
   message: string; // base64
   signature: string; // base64
@@ -57,7 +56,7 @@ async function submit(path: string) {
   const message = new Uint8Array(Buffer.from(r.message, 'base64'));
   const signature = new Uint8Array(Buffer.from(r.signature, 'base64'));
 
-  // Ответ должен быть про D и этот реестр: сообщение из полей ответа совпадает с подписанным.
+  // Аттестатор должен был подписать печать именно для D и этого реестра
   const expected = ix.sealMessage({
     program,
     address: d.address,
@@ -99,7 +98,7 @@ async function submit(path: string) {
     ]);
   }
 
-  // Перевод демо-токена на D: у D теперь печать уровня Attestor, хук пропускает.
+  // У D теперь печать уровня Attestor, хук перевод пропустит
   const mint = (await demoKey('mint')).address;
   if (!(await account(mint))) throw new Error(`demo mint ${mint} not found: run npm run devnet:seal first`);
   const extraMetas = await pda(['extra-account-metas', bytesOf(mint)], hook);

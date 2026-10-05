@@ -10,7 +10,7 @@ import (
 	"github.com/mr-tron/base58"
 )
 
-// Эталон из спека аттестатора: входные данные Rust-теста layout_matches_spec_offsets.
+// Тот же вектор, что в Rust-тесте layout_matches_spec_offsets
 const (
 	referenceHex = "4d4f522d5345414c2d5631afe3ef75354d140f003334108037ea07df2cfdad47b65d62fa7a5d78f63d0fb0010101010101010101010101010101010101010101010101010101010101010102020202020202020202020202020202020202020202020202020202020202020201030303030303030303030303030303030303030303030303030303030303030304040404040404040404040404040404040404040404040404040404040404044b5a0005050505050505050505050505050505050505050505050505050505050505050807060504030201ffffffffffffffff19d0a2d09ed09e20c2abd0a0d0bed0bcd0b0d188d0bad0b0c2bb"
 	referenceSHA = "41672e1455b594791f5bf302171b05f2de12063730d12a707bcc738a8b18213b"
@@ -49,7 +49,7 @@ func TestReferenceVectors(t *testing.T) {
 		t.Fatal("sha256 mismatch")
 	}
 
-	// PDA TrustService тестового аттестатора совпадает с зарегистрированным на devnet.
+	// PDA TrustService тестового аттестатора совпадает с зарегистрированным на devnet
 	key, err := LoadKeypair("../../fixtures/keys/attestor.json")
 	if err != nil {
 		t.Fatal(err)

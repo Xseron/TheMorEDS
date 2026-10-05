@@ -1,4 +1,4 @@
-// Встроенный демо-кошелёк: сид в localStorage этого браузера, ключ через WebCrypto. Ничего не защищает.
+// Встроенный демо-кошелёк: сид в localStorage этого браузера, ключ через WebCrypto. Ничего не защищает
 import { createKeyPairFromPrivateKeyBytes, getAddressFromPublicKey, getTransactionDecoder, getTransactionEncoder, partiallySignTransaction } from '@solana/kit'
 import { fromHex, hex } from './registry'
 import type { Wallet } from './submit'

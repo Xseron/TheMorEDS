@@ -1,4 +1,4 @@
-// Досье облигации: аккаунты программы по минту, балансы, время кластера. Обновляется, пока вкладка видна
+// Досье облигации: аккаунты программы по минту, балансы и время кластера
 import { getBase64Encoder, type Address, type ReadonlyUint8Array } from '@solana/kit'
 import {
   BOND_EVENT_DISCRIMINATOR, HOLDER_STATE_DISCRIMINATOR, SNAPSHOT_DISCRIMINATOR,

@@ -1,4 +1,4 @@
-// Облигация KASE: адреса, график, суммы и инструкции вокруг программы bond_lifecycle (клиент — Codama из mor-kase)
+// Облигация KASE вокруг bond_lifecycle: PDA, график, суммы, инструкции. Клиент генерирует Codama из mor-kase
 import { AccountRole, address, getAddressEncoder, getProgramDerivedAddress, type Address, type Instruction } from '@solana/kit'
 import type { BondEvent, Terms, TermsArgs } from './bond/generated'
 import { ATA_PROGRAM, SYSTEM_PROGRAM, TOKEN_2022, concat, u32le, u64le } from './registry'
@@ -21,7 +21,7 @@ export const ata2022 = (owner: Address, mint: Address) => pda(ATA_PROGRAM, [b(ow
 
 type Schedule = Pick<Terms, 'startTs' | 'periodSecs' | 'recordOffsetSecs' | 'noticeSecs' | 'nEvents'>
 
-// Те же формулы, что math.rs программы
+// Те же формулы, что в math.rs программы
 export const paymentTs = (t: Schedule, k: number) => t.startTs + t.periodSecs * BigInt(k)
 export const recordTs = (t: Schedule, k: number) => paymentTs(t, k) - t.recordOffsetSecs
 export const noticeDeadline = (t: Schedule, k: number) => recordTs(t, k) - t.noticeSecs
@@ -37,7 +37,7 @@ export const coupon = (t: Pick<Terms, 'face' | 'couponRateBps' | 'paymentsPerYea
   balance * t.face * BigInt(t.couponRateBps) / (10_000n * BigInt(t.paymentsPerYear))
 export const redeemed = (balance: bigint, bps: number, isFinal: boolean) => (isFinal ? balance : balance * BigInt(bps) / 10_000n)
 
-/** Время кластера: сегодня только время, иначе дата и время ("3 Oct 2026, 12:52:34") */
+/** Сегодня только время, иначе "3 Oct 2026, 12:52:34" */
 export function formatClock(unix: bigint): string {
   const d = new Date(Number(unix) * 1000)
   if (d.toDateString() === new Date().toDateString()) return d.toLocaleTimeString('en-GB')
@@ -48,7 +48,7 @@ export function formatTkzt(minor: bigint): string {
   return `${(minor / 100n).toLocaleString('en-US')}.${(minor % 100n).toString().padStart(2, '0')} tKZT`
 }
 
-/** Пример трека в масштабе демо: 1000.00, 10%, дважды в год, 4 события; дата выплаты через четверть периода после фиксации */
+/** Демо-масштаб: номинал 1000.00, 10% дважды в год, 4 события, фиксация за четверть периода до выплаты */
 export function demoTerms(now: bigint, periodSecs: bigint): TermsArgs {
   return {
     face: 100_000n, couponRateBps: 1_000, paymentsPerYear: 2, nEvents: 4, startTs: now + 60n,
@@ -77,7 +77,7 @@ export function createAta2022Instruction(payer: Address, ata: Address, owner: Ad
   }
 }
 
-/** ComputeBudget::SetComputeUnitLimit (2): явный потолок 400k; по умолчанию для этой транзакции лимит был бы выше (200k на инструкцию), а так он предсказуем */
+/** ComputeBudget::SetComputeUnitLimit (2). По умолчанию дают 200k на инструкцию, с явным потолком лимит предсказуем */
 export function setComputeUnitLimitInstruction(units: number): Instruction {
   return { programAddress: address('ComputeBudget111111111111111111111111111111'), data: concat(Uint8Array.of(2), u32le(units)) }
 }

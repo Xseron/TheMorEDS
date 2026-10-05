@@ -1,6 +1,5 @@
 // Package request разбирает текст запроса на печать, который компания подписывает в
-// NCALayer. Формат строгий: ровно эти строки в этом порядке, LF, без пробелов в конце
-// строк и без завершающего перевода строки; любое отклонение — ErrBadText.
+// NCALayer. Формат строгий, любое отклонение даёт ErrBadText
 package request
 
 import (
@@ -14,12 +13,11 @@ import (
 	"mor/attestor/seal"
 )
 
-// Header — первая строка запроса.
 const Header = "MOR-SEAL-REQUEST-V1"
 
 var ErrBadText = errors.New("bad request text")
 
-// Request — разобранный запрос. Название и БИН в нём нет: их берут из сертификата.
+// Request без названия и БИН: их берут из сертификата
 type Request struct {
 	Program    [32]byte
 	Address    [32]byte
@@ -31,7 +29,6 @@ type Request struct {
 
 var keys = [...]string{"program", "address", "kind", "controller", "expires", "deadline"}
 
-// kindNames — имена типов адреса по значению seal.Kind.
 var kindNames = [...]string{seal.Wallet: "wallet", seal.Program: "program", seal.Mint: "mint"}
 
 func Parse(text []byte) (Request, error) {
@@ -70,7 +67,7 @@ func Parse(text []byte) (Request, error) {
 	return r, nil
 }
 
-// Text — канонический текст запроса.
+// Text возвращает канонический текст запроса
 func (r Request) Text() string {
 	return strings.Join([]string{
 		Header,
@@ -102,7 +99,7 @@ func kind(s string) (seal.Kind, error) {
 	return 0, fmt.Errorf("%w: kind must be wallet, program or mint", ErrBadText)
 }
 
-// unix — десятичное число без знака «+», ведущих нулей и пробелов.
+// Только каноническая запись: без "+", ведущих нулей и пробелов
 func unix(s string) (int64, error) {
 	n, err := strconv.ParseInt(s, 10, 64)
 	if err != nil || strconv.FormatInt(n, 10) != s {

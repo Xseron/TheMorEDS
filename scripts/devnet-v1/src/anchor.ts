@@ -11,7 +11,7 @@ export const INSTRUCTIONS_SYSVAR = address('Sysvar1nstructions111111111111111111
 export const SYSTEM_PROGRAM = address('11111111111111111111111111111111');
 export const BPF_LOADER_UPGRADEABLE = address('BPFLoaderUpgradeab1e11111111111111111111111');
 
-/** Anchor: первые 8 байт sha256("global:<snake_name>"). */
+/** Anchor: первые 8 байт sha256("global:<snake_name>") */
 export function discriminator(name: string): Uint8Array {
   return new Uint8Array(createHash('sha256').update(`global:${name}`).digest()).subarray(0, 8);
 }
@@ -48,7 +48,7 @@ export function borshString(s: string): Uint8Array {
   return borshBytes(new TextEncoder().encode(s));
 }
 
-/** Самодостаточная инструкция прекомпайла: все индексы 0xFFFF, ключ с 16-го байта, затем подпись и сообщение. */
+/** Самодостаточная инструкция прекомпайла: все индексы 0xFFFF, ключ с 16-го байта, затем подпись и сообщение */
 function precompileInstruction(program: Address, pubkey: Uint8Array, sig: Uint8Array, msg: Uint8Array): Instruction {
   const pkOff = 16, sigOff = pkOff + pubkey.length, msgOff = sigOff + 64;
   const header = new Uint8Array(16);
@@ -127,7 +127,7 @@ export function registerCertificateInstruction(
 }
 
 /** Раскладка Certificate: 8 disc, 32 trust_service, vec serial, 32 tbs_hash, 33 subject_key,
- *  string org_name, string org_id, 2 country, i64 ×3, u8 bump. */
+ *  string org_name, string org_id, 2 country, i64 x3, u8 bump */
 export function decodeCertificate(data: Uint8Array) {
   const dv = new DataView(data.buffer, data.byteOffset);
   let o = 8;
@@ -156,7 +156,7 @@ export type SealMessageFields = {
   controller: Address;
   trustLevel: TrustLevel;
   trustService: Address;
-  certificate: Address | null; // null — аттестатор (32 нулевых байта)
+  certificate: Address | null; // у аттестатора null, в сообщении 32 нулевых байта
   jurisdiction: string; // 2 буквы ISO 3166-1
   identifierHash: Uint8Array;
   expiresAt: bigint;
@@ -164,7 +164,7 @@ export type SealMessageFields = {
   name: string;
 };
 
-/** Подписываемое сообщение печати — раскладка из спека недели 2 («Подписываемое сообщение»). */
+/** Байт в байт как SealMessage::to_bytes в programs/mor-registry/src/seal_message.rs */
 export function sealMessage(f: SealMessageFields): Uint8Array {
   const name = new TextEncoder().encode(f.name);
   if (name.length < 1 || name.length > 128) throw new Error('seal name must be 1..128 UTF-8 bytes');
@@ -260,7 +260,7 @@ export function revokeSealInstruction(
   };
 }
 
-/** Раскладка Seal (спек недели 2): поля по фиксированным смещениям, название — с 190. */
+/** Поля Seal по фиксированным смещениям, название с 190 */
 export function decodeSeal(d: Uint8Array) {
   const dv = new DataView(d.buffer, d.byteOffset);
   const dec = getAddressDecoder();

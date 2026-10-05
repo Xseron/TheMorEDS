@@ -15,7 +15,7 @@ fn env_with_ca1() -> (Env, common::CaFixture, anchor_lang::prelude::Pubkey) {
     (env, ca, trust)
 }
 
-// 1. Сертификат подписан другим УЦ; клиент честно передал ключ подписавшего.
+// Ключ подписавшего УЦ передан честно, но сам УЦ не зарегистрирован
 #[test]
 fn rejects_certificate_from_untrusted_ca() {
     let (mut env, _ca, trust) = env_with_ca1();
@@ -23,7 +23,7 @@ fn rejects_certificate_from_untrusted_ca() {
     assert_mor_err(&res, MorError::UntrustedKey, 1);
 }
 
-// 2. Подпись ключом УЦ, но issuer — другой DN (ротация с тем же ключом не зарегистрирована).
+// Ключ ca1, но issuer другой: ротация DN с тем же ключом не зарегистрирована
 #[test]
 fn rejects_issuer_mismatch() {
     let (mut env, ca, trust) = env_with_ca1();
@@ -31,7 +31,6 @@ fn rejects_issuer_mismatch() {
     assert_mor_err(&res, MorError::IssuerMismatch, 1);
 }
 
-// 3. Сертификат сотрудника.
 #[test]
 fn rejects_natural_person_certificate() {
     let (mut env, ca, trust) = env_with_ca1();
@@ -39,7 +38,7 @@ fn rejects_natural_person_certificate() {
     assert_mor_err(&res, MorError::NaturalPersonCert, 1);
 }
 
-// 4. Прекомпайл ссылается на себя абсолютным индексом 0, а не 0xFFFF — прекомпайл это принимает, программа нет.
+// Индекс 0 вместо 0xFFFF прекомпайл принимает, программа нет
 #[test]
 fn rejects_precompile_with_absolute_self_index() {
     let (mut env, ca, trust) = env_with_ca1();
@@ -55,12 +54,11 @@ fn rejects_precompile_with_absolute_self_index() {
     assert_mor_err(&res, MorError::PrecompileMalformed, 1);
 }
 
-// 5. Две одинаковые подписи в одной инструкции прекомпайла.
 #[test]
 fn rejects_precompile_with_two_signatures() {
     let (mut env, ca, trust) = env_with_ca1();
     let cert = ee(EE_SMALL);
-    // данные начинаются после 2 + 2 × 14 = 30 байт
+    // данные начинаются после 2 + 2 x 14 = 30 байт
     let offsets = [63u16, 0xFFFF, 30, 0xFFFF, 127, cert.tbs.len() as u16, 0xFFFF];
     let mut data = vec![2u8, 0];
     for _ in 0..2 {
@@ -78,7 +76,6 @@ fn rejects_precompile_with_two_signatures() {
     assert_mor_err(&res, MorError::PrecompileMalformed, 1);
 }
 
-// 6. Программа первая в транзакции.
 #[test]
 fn rejects_missing_precompile_when_first() {
     let (mut env, _ca, trust) = env_with_ca1();
@@ -89,7 +86,6 @@ fn rejects_missing_precompile_when_first() {
     assert_mor_err(&res, MorError::PrecompileMissing, 0);
 }
 
-// 7. Перед программой не прекомпайл, а перевод.
 #[test]
 fn rejects_missing_precompile_when_other_instruction_before() {
     let (mut env, _ca, trust) = env_with_ca1();
@@ -101,7 +97,6 @@ fn rejects_missing_precompile_when_other_instruction_before() {
     assert_mor_err(&res, MorError::PrecompileMissing, 1);
 }
 
-// 8. Аргумент serial не совпадает с сертификатом.
 #[test]
 fn rejects_serial_mismatch() {
     let (mut env, ca, trust) = env_with_ca1();
@@ -114,7 +109,6 @@ fn rejects_serial_mismatch() {
     assert_mor_err(&res, MorError::SerialMismatch, 1);
 }
 
-// 9. Срок действия: часы переведены на секунду за границы notBefore/notAfter.
 #[test]
 fn rejects_expired_and_not_yet_valid() {
     let (mut env, ca, trust) = env_with_ca1();
@@ -127,7 +121,6 @@ fn rejects_expired_and_not_yet_valid() {
     assert_mor_err(&res, MorError::CertNotYetValid, 1);
 }
 
-// 10. RSA-ключ субъекта и отсутствие organizationIdentifier.
 #[test]
 fn rejects_rsa_key_and_missing_org_id() {
     let (mut env, ca, trust) = env_with_ca1();
@@ -137,7 +130,6 @@ fn rejects_rsa_key_and_missing_org_id() {
     assert_mor_err(&res, MorError::MissingOrgAttributes, 1);
 }
 
-// 11. Изменённый байт TBS и high-S валят сам прекомпайл (инструкция 0), до программы дело не доходит.
 #[test]
 fn precompile_rejects_tampered_tbs_and_high_s() {
     let (mut env, ca, trust) = env_with_ca1();
@@ -155,8 +147,7 @@ fn precompile_rejects_tampered_tbs_and_high_s() {
     assert_eq!(failed_ix(&err).map(|(ix, _)| ix), Some(0), "must fail in the precompile: {:?}", err.err);
 }
 
-// 12. Сертификат самого УЦ: подпись, issuer, ключ и O/organizationIdentifier в порядке,
-// но это CA:TRUE с keyCertSign — не печать организации.
+// Самоподписанный ca1 проходит все проверки, кроме CA:TRUE
 #[test]
 fn rejects_ca_certificate_as_end_entity() {
     let (mut env, ca, trust) = env_with_ca1();
@@ -164,7 +155,7 @@ fn rejects_ca_certificate_as_end_entity() {
     assert_mor_err(&res, MorError::NotEndEntity, 1);
 }
 
-// Сертификат OCSP-респондера того же УЦ: подписывает чужие данные, печатью быть не может.
+// OCSP-респондер подписывает чужие данные, печатью он быть не может
 #[test]
 fn rejects_ocsp_signing_certificate() {
     let (mut env, ca, trust) = env_with_ca1();

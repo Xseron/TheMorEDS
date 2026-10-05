@@ -11,15 +11,12 @@ import (
 	"slices"
 )
 
-// Verifier — проверка CMS для аттестатора. Подпись, цепочку с подписями УЦ, срок и отзыв
-// проверяет KalkanCrypt (VerifyCMS, CheckCRL); crypto/x509 только читает поля сертификата.
-// Кроме того, издатель подписанта — один из УЦ из конфига: AuthorityKeyId равен его
-// SubjectKeyId, а Issuer — его Subject (байт в байт), и сертификат не самоизданный.
-// KalkanCrypt строит цепочки и по системному хранилищу (/etc/ssl/certs), а печать ставят
-// только сертификаты настроенного УЦ НУЦ. Заодно в X509ValidateCertificate не попадают
-// сертификаты чужих издателей: на самоподписанном сертификате без AuthorityKeyId после LoadCA
-// она падает (SIGSEGV), а на самоподписанном с AuthorityKeyId УЦ НУЦ отвечает кодом ошибки
-// загрузки CRL, а не отказом сертификату.
+// Verifier сверх KalkanCrypt требует, чтобы издатель был одним из УЦ из конфига: AuthorityKeyId
+// равен его SubjectKeyId, Issuer его Subject байт в байт, сам сертификат не самоизданный. Цепочки
+// KalkanCrypt строит и по /etc/ssl/certs, а печать ставят только сертификаты НУЦ. Заодно чужие
+// сертификаты не доходят до X509ValidateCertificate: на самоподписанном без AuthorityKeyId она
+// падает с SIGSEGV, а на самоподписанном с AuthorityKeyId УЦ НУЦ отвечает ошибкой загрузки CRL
+// вместо отказа
 type Verifier struct {
 	crls    []string
 	issuers []issuer
@@ -27,15 +24,13 @@ type Verifier struct {
 
 type issuer struct{ keyID, subject []byte }
 
-// NewVerifier загружает УЦ в KalkanCrypt (самоподписанный — как корневой, остальные — как
-// промежуточные) и запоминает их SubjectKeyId и Subject. Init вызывается раньше.
+// NewVerifier зовётся после Init
 func NewVerifier(caPaths, crlPaths []string) (*Verifier, error) {
 	if len(crlPaths) == 0 {
 		return nil, errors.New("kalkan: at least one CRL is required")
 	}
-	// Файл CRL должен существовать и читаться: иначе каждый запрос получил бы 500.
-	// Разбор x509.ParseRevocationList не годится: Go отвергает CRL НУЦ («inner and outer
-	// signature algorithm identifiers don't match»).
+	// без файла CRL каждый запрос получал бы 500. Разобрать его x509.ParseRevocationList нельзя:
+	// Go отвергает CRL НУЦ с "inner and outer signature algorithm identifiers don't match"
 	for _, path := range crlPaths {
 		if _, err := os.Stat(path); err != nil {
 			return nil, fmt.Errorf("kalkan: CRL: %w", err)
@@ -66,13 +61,8 @@ func NewVerifier(caPaths, crlPaths []string) (*Verifier, error) {
 	return v, nil
 }
 
-// Verify проверяет присоединённую CMS (base64) и возвращает подписанные данные и сертификат
-// подписанта (DER). Шаги: VerifyCMS — один подписант, значение подписи, хэш содержимого;
-// привязка к УЦ из конфига; для каждого CRL — CheckCRL: цепочка с подписями УЦ, срок, отзыв.
-//
-// Ошибки: ErrBadSignature, ErrRevoked или *Error. ErrBadSignature часто обёрнута вместе
-// с *Error (fmt.Errorf("%w: %w", ErrBadSignature, e)), и тогда errors.As(err, &kalkanErr)
-// тоже истинно: сначала проверять errors.Is(err, ErrBadSignature), потом errors.As.
+// Verify часто возвращает ErrBadSignature, обёрнутую вместе с *Error, и errors.As на ней тоже
+// срабатывает. Поэтому сначала errors.Is(err, ErrBadSignature), потом errors.As
 func (v *Verifier) Verify(cmsB64 string) (data, certDER []byte, err error) {
 	data, certDER, err = VerifyCMS(cmsB64)
 	if err != nil {

@@ -29,7 +29,6 @@ import (
 	"mor/attestor/seal"
 )
 
-// kz объявлен в server.go того же пакета.
 var (
 	verifier    *kalkan.Verifier
 	attestorKey ed25519.PrivateKey
@@ -62,7 +61,7 @@ func handler(t *testing.T) http.Handler {
 	return h
 }
 
-// newRequest — запрос на печать случайного кошелька на 5 лет: дольше любого тестового сертификата.
+// на 5 лет: дольше любого тестового сертификата
 func newRequest(now time.Time) request.Request {
 	var addr [32]byte
 	rand.Read(addr[:])
@@ -81,7 +80,7 @@ func signAs(role, state string) func(*testing.T, []byte) string {
 	return func(t *testing.T, text []byte) string { return testpki.Sign(t, testpki.P12(t, role, state), text) }
 }
 
-// wrap переносит base64 по строкам, как может отдавать NCALayer.
+// NCALayer может отдать base64 с переносами строк
 func wrap(s string, n int) string {
 	var b strings.Builder
 	for len(s) > n {
@@ -92,8 +91,7 @@ func wrap(s string, n int) string {
 	return b.String()
 }
 
-// Тест 4 спека: первый руководитель (действующий) — 200, подпись аттестатора верна,
-// сообщение — ровно то, что ждёт register_seal_attested.
+// сообщение должно быть ровно тем, что ждёт register_seal_attested
 func TestAttestFirstHead(t *testing.T) {
 	now := time.Now()
 	req := newRequest(now)
@@ -139,7 +137,6 @@ func TestAttestFirstHead(t *testing.T) {
 	}
 }
 
-// Тесты 5–8 спека и поддельная цепочка.
 func TestAttestRejects(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -167,21 +164,18 @@ func TestAttestRejects(t *testing.T) {
 	}
 }
 
-// tampered — CMS первого руководителя, в которой изменена одна буква подписанного текста.
 func tampered(t *testing.T, text []byte) string {
 	der, _ := base64.StdEncoding.DecodeString(signAs("Первый руководитель", "valid")(t, text))
 	i := bytes.Index(der, []byte(request.Header))
 	if i < 0 {
 		t.Fatal("request text not found inside the CMS")
 	}
-	der[i] ^= 0x20 // 'M' → 'm'
+	der[i] ^= 0x20 // 'M' -> 'm'
 	return base64.StdEncoding.EncodeToString(der)
 }
 
-// forged — CMS «первого руководителя» с правильными O, OU=BIN… и EKU, чей издатель носит DN
-// и SubjectKeyId промежуточного УЦ НУЦ, но подписан чужим ключом RSA. Подписывает сама
-// KalkanCrypt (p12 собирает openssl), чтобы формат CMS был как у настоящей и отказ шёл только
-// от цепочки.
+// сертификат с правильными O, OU=BIN и EKU и с DN промежуточного УЦ НУЦ в издателе, но подписан
+// чужим RSA-ключом. CMS подписывает сама KalkanCrypt, чтобы отказ шёл только от цепочки
 func forged(t *testing.T, text []byte) string {
 	raw, err := os.ReadFile(testpki.CAs()[1])
 	if err != nil {
@@ -194,9 +188,8 @@ func forged(t *testing.T, text []byte) string {
 	subject := pkix.Name{Country: []string{"KZ"}, Organization: []string{"ТОО «Подделка»"},
 		OrganizationalUnit: []string{"BIN123456789012"}, CommonName: "FORGED"}
 	der, key := testpki.ForgedCert(t, nca, big.NewInt(2), subject, nil)
-	// KalkanCrypt строит цепочку поддельного сертификата только после того, как одна настоящая
-	// подпись НУЦ прогрела её кэш; без этого SignData падает с 0x08f00042 при запуске строки
-	// отдельно. Результат прогрева не нужен.
+	// без одной настоящей подписи НУЦ перед этим (прогрев кэша) SignData на поддельном падает
+	// с 0x08f00042, если запускать этот кейс отдельно
 	signAs("Первый руководитель", "valid")(t, text)
 	return testpki.Sign(t, testpki.P12FromKey(t, der, key), text)
 }

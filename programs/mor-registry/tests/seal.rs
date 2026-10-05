@@ -21,7 +21,6 @@ fn ok(res: TxResult) {
     res.unwrap_or_else(|e| panic!("{:?}\n{:#?}", e.err, e.meta.logs));
 }
 
-// 1. Кошелёк Acme запечатан своим сертификатом; повторная печать того же адреса невозможна.
 #[test]
 fn seals_wallet_with_eidas_certificate() {
     let (mut env, trust, cert) = setup();
@@ -48,7 +47,7 @@ fn seals_wallet_with_eidas_certificate() {
     assert_eq!(still.expires_at, seal.expires_at);
 }
 
-// 3. Программу печатает её upgrade authority (без ProgramData — отказ), минт — mint authority.
+// Без ProgramData upgrade authority не доказать
 #[test]
 fn seals_program_and_mint_by_their_authorities() {
     let (mut env, trust, cert) = setup();
@@ -72,7 +71,6 @@ fn seals_program_and_mint_by_their_authorities() {
     assert_eq!(env.account::<Seal>(&env.seal_pda(&mint)).controller, authority.pubkey());
 }
 
-// 5. Подпись над одним сообщением, аргументы — другие.
 #[test]
 fn rejects_message_that_differs_from_arguments() {
     let (mut env, trust, cert) = setup();
@@ -84,7 +82,7 @@ fn rejects_message_that_differs_from_arguments() {
     assert_mor_err(&env.seal_p256_signed(&r, &acme, EE_KEY_PEM, &msg), MorError::SealMessageMismatch, 1);
 }
 
-// 6. Прекомпайл проверил подпись ключом УЦ, а не ключом сертификата организации.
+// Подпись валидна, но ключом УЦ, а не ключом из сертификата
 #[test]
 fn rejects_signature_by_another_key() {
     let (mut env, trust, cert) = setup();
@@ -94,7 +92,6 @@ fn rejects_signature_by_another_key() {
     assert_mor_err(&env.seal_p256_signed(&r, &acme, CA1_KEY_PEM, &msg), MorError::UntrustedKey, 1);
 }
 
-// 7. Между прекомпайлом и печатью — другая инструкция.
 #[test]
 fn rejects_precompile_not_immediately_before() {
     let (mut env, trust, cert) = setup();
@@ -109,7 +106,6 @@ fn rejects_precompile_not_immediately_before() {
     assert_mor_err(&env.send(&acme, &[], &ixs), MorError::PrecompileMissing, 2);
 }
 
-// 8. Ed25519-проверка того же сообщения вместо secp256r1.
 #[test]
 fn rejects_ed25519_precompile_on_eidas_path() {
     let (mut env, trust, cert) = setup();
@@ -121,7 +117,6 @@ fn rejects_ed25519_precompile_on_eidas_path() {
     assert_mor_err(&env.send(&acme, &[], &ixs), MorError::PrecompileMissing, 1);
 }
 
-// 9. Посторонний выдаёт себя за mint authority.
 #[test]
 fn rejects_stranger_posing_as_mint_authority() {
     let (mut env, trust, cert) = setup();
@@ -134,7 +129,6 @@ fn rejects_stranger_posing_as_mint_authority() {
     assert_mor_err(&env.seal_p256(&r, &stranger), MorError::NotController, 1);
 }
 
-// 10. Подпись опоздала; срок печати позже конца сертификата.
 #[test]
 fn rejects_late_signature_and_expiry_beyond_certificate() {
     let (mut env, trust, cert) = setup();
@@ -148,8 +142,6 @@ fn rejects_late_signature_and_expiry_beyond_certificate() {
     assert_mor_err(&env.seal_p256(&r, &acme), MorError::InvalidExpiry, 1);
 }
 
-// 4. Посторонний не отзывает; после смены mint authority новый владелец снимает печать,
-// выданную при прежнем, и запечатывает минт заново.
 #[test]
 fn stranger_cannot_revoke_new_mint_authority_can() {
     let (mut env, trust, cert) = setup();
@@ -163,7 +155,7 @@ fn stranger_cannot_revoke_new_mint_authority_can() {
 
     let stranger = env.fund_new();
     assert_mor_err(&env.revoke(&stranger, &mint, None), MorError::NotController, 0);
-    // Чужой кошелёк как `address` вместе с печатью минта: связь печати и адреса держит ограничение.
+    // Подмена: свой адрес, но печать минта
     let mint_seal = env.seal_pda(&mint);
     assert_mor_err(
         &env.revoke_with_seal(&stranger, &stranger.pubkey(), &mint_seal, None),
@@ -181,13 +173,13 @@ fn stranger_cannot_revoke_new_mint_authority_can() {
     ok(env.seal_p256(&r, &new));
     assert_eq!(env.account::<Seal>(&pda).controller, new.pubkey());
 
-    // Сохранённый контролёр снимает печать, даже когда mint authority уже у третьего.
+    // Сохранённый контролёр снимает печать, даже когда mint authority уже у третьего
     let third = env.fund_new();
     set_mint(&mut env.svm, &mint, &third.pubkey());
     ok(env.revoke(&new, &mint, None));
     assert!(env.svm.get_account(&pda).map_or(true, |a| a.data.is_empty()), "seal must be closed");
 
-    // Адрес запечатали как кошелёк, потом на нём появился минт: печать снимает его authority.
+    // Адрес запечатали как кошелёк, потом на нём появился минт: печать снимает его authority
     let early = env.fund_new();
     let authority = env.fund_new();
     let early_req = SealReq::wallet(&early.pubkey(), &trust, &cert);
@@ -196,7 +188,7 @@ fn stranger_cannot_revoke_new_mint_authority_can() {
     ok(env.revoke(&authority, &early.pubkey(), None));
 }
 
-// Крейт читает печать, записанную Anchor, по своим смещениям: раскладки не разошлись.
+// Крейт читает печать, записанную Anchor, по своим смещениям: раскладки не разошлись
 #[test]
 fn verify_seal_crate_reads_registry_seal() {
     assert_eq!(mor_verify_seal::MOR_REGISTRY_ID, mor_registry::ID);
