@@ -36,7 +36,7 @@
 
 ### 3. Rules already ask who receives a transfer
 - **Problem:** the FATF Travel Rule, EU Regulation 2023/1113 and Kazakhstan's digital-assets law require providers to know the beneficiary of a transfer
-- **MOR:** a Token-2022 transfer hook lets a token move only to wallets with a valid seal of the required trust level. Missing or expired seal: the transfer is rejected
+- **MOR:** any program that moves value can require a seal of the right trust level before it lets a transfer through. For permissioned tokens, such as tokenized securities or B2B settlement tokens, a Token-2022 transfer hook does it on every transfer: missing or expired seal, the transfer is rejected
 
 ### 4. Identity must not leak on-chain
 - **Problem:** certificates and ID numbers on a public ledger expose the people who sign for a company
@@ -46,14 +46,16 @@
 
 ## Existing Approaches and MOR
 
-| Approach | Identity source | Application access | Main dependency |
-|----------|-----------------|--------------------|-----------------|
-| Licensed exchanges | Customer onboarding | Exchange integration | Licensed operator |
-| KYB platforms, e.g. Sumsub | Documents and company registries | Provider API | Verification provider |
-| Attestations, e.g. EAS | Issuer-defined claims | Attestation schema | Attestation issuer |
-| **MOR** | Electronic signatures of organizations | Solana registry + Token-2022 hook | Trusted CAs + Kazakhstan attestor |
+| | Source of trust | Can anyone re-check it? | Cost and time | Revocation | Privacy |
+|---|---|---|---|---|---|
+| KYB providers, e.g. Sumsub | The provider | No | Hours to days, a fee per check | Manual | Documents stay with the provider |
+| Civic Pass | The KYC provider | No | Minutes to days | Yes, by the provider | Gateway token without PII |
+| Solana Attestation Service, EAS | The attestation issuer | No, the issuer is the source of truth | Depends on the issuer | Yes, by the issuer | Depends on the schema |
+| **MOR** | State and qualified CAs | EU path: yes, verified by the program and kept in the ledger. Kazakhstan: the company keeps the signed request | Seconds, about 0.003 SOL of rent that comes back on revoke | Expiry no later than the certificate, CRL at sealing time | Company name and a salted hash of the BIN, nothing about the signer |
 
-Reusable verification across Solana applications. The trust model stays explicit: accepted certificate authorities and attestors
+MOR is an attestation too. The difference is where trust comes from: in SAS or EAS the issuer is the source of truth and you take its word, while the MOR attestor only checks a state electronic signature the company made itself. The next step removes even that: a ZK proof of the GOST signature check turns the attestor into a relay
+
+Coinbase Verifications, zkTLS (Reclaim, zkPass) and Privado ID are compared in [docs/product.md](docs/product.md#how-it-differs)
 
 ---
 
@@ -62,6 +64,7 @@ Reusable verification across Solana applications. The trust model stays explicit
 - **secp256r1 precompile (SIMD-0075):** the program verifies EU P-256 certificates and signatures on-chain, so the eIDAS path needs no trusted middleman
 - **4096-byte v1 transactions:** a whole certificate fits into one transaction next to the precompile instruction
 - **Token-2022 transfer hooks:** the seal check runs on every transfer of a token without wrapping it or changing wallets
+- **alt_bn128 syscalls:** Groth16 proofs verify on-chain, the planned way to check a GOST signature without trusting the attestor
 - **PDAs:** a seal lives at a deterministic address, so any program finds it without an index or an off-chain lookup
 - **Low fees:** checking a seal on each transfer and sealing a wallet stay cheap enough for everyday B2B payments
 
@@ -72,10 +75,11 @@ Reusable verification across Solana applications. The trust model stays explicit
 - Seal registry for wallets, programs and mints with jurisdiction, entity type, trust level and expiry
 - EU path: P-256 organization certificate and signature verified on-chain, trust level `Trustless`
 - Kazakhstan path: NCA signature (GOST 34.10-2015) from NCALayer checked by a Go attestor on the certified KalkanCrypt library, trust level `Attestor`
+- Signer authority: in Kazakhstan only the first head or an employee with signing rights can seal, the role comes from the NCA certificate
 - Two-sided consent: the company signs the seal message, the wallet controller signs the transaction
 - Revocation by the stored or the current controller of the address
 - `mor-verify-seal` crate: one call checks the owner, expiry and minimum trust level
-- Token-2022 demo token whose transfer hook admits only sealed recipients
+- The registry is the product: any program reads a seal. The Token-2022 demo token is one consumer, its transfer hook admits only sealed recipients
 - Website: "who stands behind this address" extract, sealing through NCALayer or a test attestor, sealed transfer demo, devnet faucet
 - KASE track: corporate actions for a tokenized bond with sealed holders, program in [Mor-Dividends](https://github.com/Xseron/Mor-Dividends)
 
@@ -112,7 +116,9 @@ Valid required seal: allow. Missing or expired seal: reject
 |------|------------------------------|-------------|
 | On-chain verification | EU organization certificate, CA signature and seal signature through the secp256r1 precompile | `Trustless` |
 | Attestor | Kazakhstan NCA signature checked off-chain by KalkanCrypt, the attestor signs the seal message with Ed25519 | `Attestor` |
-| Zero-knowledge | Planned privacy layer | |
+| Zero-knowledge, planned | The GOST signature check proven in a zkVM (SP1 or RISC Zero), Groth16 verified on-chain through alt_bn128 | `Trustless` for Kazakhstan too |
+
+Why an attestor at all: GOST 34.10-2015 isn't among Solana's precompiles (Ed25519, secp256k1, secp256r1), and a 512-bit curve with Streebog is too heavy for a program's compute budget. The attestor verifies but doesn't vouch: the signature is the company's own, and the attestor is one replaceable entry in the registry's trust list
 
 See [docs/architecture.md](docs/architecture.md) for the components, accounts, trust model and limits
 
@@ -162,7 +168,8 @@ let seal = mor_verify_seal::verify_seal(&seal_account, &owner, TrustLevel::Attes
 - [ ] Revocation by the organization and on certificate revocation
 - [ ] Audits, security review and mainnet
 - [ ] Licenses and approvals: NCA of Kazakhstan, Alatau City, AFSA (AIFC), eIDAS trust services in the EU
-- [ ] Zero-knowledge privacy layer
+- [ ] ZK proof of the GOST signature check, so the attestor becomes a relay
+- [ ] Ongoing revocation checks and company status from the state business register
 - [ ] Going global: more countries with a national PKI or qualified signatures, individual users
 - [ ] Other networks: EVM chains with a P-256 precompile, served by the same attestor
 

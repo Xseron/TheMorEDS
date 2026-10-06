@@ -4,7 +4,7 @@
 
 MOR (from Kazakh "мөр", seal) links a company to a Solana wallet so applications can verify its identity. The company signs once with the electronic signature it already holds, and the wallet gets an organization seal that any Solana program can check
 
-A wallet shows its full transaction history but not the legal counterparty behind it. Today company identity and wallet control need extra evidence, and each platform runs its own onboarding for business counterparties. A seal is reusable: one signature, checked by every application
+A wallet shows its full transaction history but not the legal counterparty behind it. Today company identity and wallet control need extra evidence, and each platform runs its own onboarding for business counterparties
 
 ## First Customers and Users
 
@@ -15,11 +15,12 @@ A wallet shows its full transaction history but not the legal counterparty behin
 
 ## Core Value Propositions
 
-1. **Reusable verification:** one seal works across all Solana applications instead of a separate onboarding per platform
-2. **Signatures companies already have:** NCA keys in Kazakhstan, organization certificates in the EU
-3. **Enforced on-chain:** a Token-2022 transfer hook lets a token move only between sealed wallets of the required trust level
-4. **No personal data on-chain:** the seal holds the company name and a salted hash of its registry number
-5. **Explicit trust model:** accepted certificate authorities and attestors are listed in the registry, and each seal shows its trust level
+1. **The state is the source of trust:** the seal rests on a qualified or national electronic signature, the same one a company uses for tax filings and contracts, not on a provider's review
+2. **Verifiable, not vouched for:** on the EU path the program itself checks the certificate and the signatures. On the Kazakhstan path the attestor only checks the company's own signature, and a ZK proof is planned to replace even that
+3. **The right person signs:** in Kazakhstan only the first head or an employee with signing rights can seal, the role comes from the NCA certificate. In the EU it's the organization's own certificate
+4. **Seconds and cents:** one signature, a few seconds, about 0.003 SOL of account rent that comes back when the seal is revoked
+5. **No personal data on-chain:** the company name and a salted hash of the BIN or registry number. Nothing about the person who signed
+6. **The registry is the product:** any Solana program reads a seal with one call. The Token-2022 hook is one consumer, for permissioned tokens such as tokenized securities and B2B settlement tokens
 
 ## Beyond Solana
 
@@ -29,12 +30,33 @@ Solana is the first network: the registry, the `mor-verify-seal` crate and the T
 
 ## How It Differs
 
-| Approach | Identity source | Application access | Main dependency |
-|----------|-----------------|--------------------|-----------------|
-| Licensed exchanges | Customer onboarding | Exchange integration | Licensed operator |
-| KYB platforms, e.g. Sumsub | Documents and company registries | Provider API | Verification provider |
-| Attestations, e.g. EAS | Issuer-defined claims | Attestation schema | Attestation issuer |
-| **MOR** | Electronic signatures of organizations | Solana registry + Token-2022 hook | Trusted CAs + Kazakhstan attestor |
+| | Source of trust | Can anyone re-check it? | Cost and time | Revocation | Privacy |
+|---|---|---|---|---|---|
+| KYB providers, e.g. Sumsub | The provider | No | Hours to days, a fee per check | Manual | Documents stay with the provider |
+| Civic Pass | The KYC provider | No | Minutes to days | Yes, by the provider | Gateway token without PII |
+| Solana Attestation Service, EAS | The attestation issuer | No, the issuer is the source of truth | Depends on the issuer | Yes, by the issuer | Depends on the schema |
+| **MOR** | State and qualified CAs | EU path: yes, verified by the program and kept in the ledger. Kazakhstan: the company keeps the signed request | Seconds, about 0.003 SOL of rent that comes back on revoke | Expiry no later than the certificate, CRL at sealing time | Company name and a salted hash of the BIN, nothing about the signer |
+
+**Solana Attestation Service (SAS).** The native attestation layer from the Solana Foundation, launched in 2025 with Civic and other issuers. It's the closest thing to a "Solana registry", and MOR is an attestation too. The difference is the source of trust: an SAS issuer is the source of truth, while MOR only records what a state signature already proves. MOR seals could be published as SAS attestations later, the two don't exclude each other
+
+**Civic Pass.** Gateway tokens: verified wallets get a pass that programs and tokens check before letting them in. It's the same "verified, then allowed" pattern, but the check is the provider's KYC, so trust rests on the provider. MOR verifies legal entities by their own electronic signature
+
+**Coinbase Verifications.** Attestations that a wallet belongs to a verified Coinbase customer. Coinbase is the issuer, and only its customers are covered
+
+**zkTLS: Reclaim, zkPass.** Prove data from a web session, for example a page of a government portal, without revealing it. Trust rests on the website and the TLS session. A qualified electronic signature is a stronger legal artifact: in Kazakhstan and the EU it has the force of a handwritten signature
+
+**Privado ID (formerly Polygon ID).** Verifiable credentials with selective disclosure through ZK proofs. The credential issuer is still the source of truth
+
+## Coverage Today and Next
+
+- **Today:** Kazakhstan through the attestor, for every legal entity with an NCA key. EU organization certificates with P-256 verified on-chain. On devnet the trust list holds test CAs only
+- **Next:** qualified certificates from all EU member states, other algorithms through the attestor, then other countries with a national PKI or qualified electronic signatures. A new country is an adapter, not a new product
+
+## Honest Limits
+
+- **Freshness:** a signature proves who signed, not that the company is still active. A seal can't outlive the certificate, and NCA certificates last about a year, so a company re-seals at least once a year with a fresh signature, which checks the signer's role again. Checks against the state business register are on the roadmap
+- **Revocation:** the attestor checks the NCA CRL at sealing time. A certificate revoked later doesn't remove the seal yet
+- **Token-2022 hook:** it works only for tokens created with the extension, so it doesn't touch SOL, USDC or most existing tokens. Some wallets and DEXes handle hooks poorly, and a hook adds accounts and compute to every transfer. That's why the registry is the product and the hook is one consumer
 
 ## Planned Scenario: Alatau City
 

@@ -19,7 +19,9 @@
 - [ ] Improve revocation: by the organization and when the certificate is revoked
 - [ ] OCSP and CRL checks for both paths
 - [ ] Prepare audits and tests
-- [ ] Research zero-knowledge proofs for the privacy layer
+- [ ] ZK proof of the GOST 34.10-2015 signature check: SP1 or RISC Zero, wrapped into Groth16 and verified on Solana through alt_bn128 syscalls. The attestor becomes a relay, and the signer's certificate never leaves the company
+- [ ] Until then, commit the hash of the signed request in every attested seal, so any seal can be matched with its evidence on request
+- [ ] Check the company's status in the state business register, not only the certificate
 
 ## Months 5 to 6: Mainnet Readiness
 - [ ] Prepare the mainnet launch

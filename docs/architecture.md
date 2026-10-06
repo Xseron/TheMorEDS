@@ -97,6 +97,11 @@ sequenceDiagram
 
 ## Trust Model
 
+MOR is an attestation, but its attestor is a verifier, not an issuer. The identity comes from a state electronic signature that the company made itself
+
+- **EU path:** nothing to trust except the CA list. The program checks the CA signature over the certificate and the certificate signature over the seal message, and both stay in the ledger, so anyone can re-check them
+- **Kazakhstan path:** GOST 34.10-2015 isn't among Solana's precompiles (Ed25519, secp256k1, secp256r1), and a 512-bit curve with Streebog is too heavy for a program's compute budget, so the attestor checks it off-chain. The signed request contains the signer's name and IIN, so it isn't published: the company keeps it and can show it to an auditor or a counterparty
+- **Removing the attestor:** the roadmap proves the GOST signature check in a zkVM (SP1 or RISC Zero), wraps it into Groth16 and verifies it on Solana through alt_bn128 syscalls. The attestor then becomes a relay, and the signer's certificate never leaves the company
 - The list of trusted CAs is kept by the program admin, who is also the upgrade authority
 - Consumers choose the minimum trust level: `Attestor` accepts both paths, `Trustless` only on-chain verified seals
 - The keys in `fixtures/keys/` (test CA and test attestor) are public, so anyone can create seals with them. They are for devnet only
@@ -136,7 +141,9 @@ Operations: without the test roots in the system store every request gets 401 `b
 - A program whose upgrade authority is a multisig, and a program or mint without an authority, can't be sealed
 - A change of the program or mint owner doesn't remove the seal, the new controller revokes it
 - The attestor checks NCA revocation by CRL at sealing time. A certificate revoked later doesn't remove the seal. OCSP isn't used, and the EU path checks neither OCSP nor CRL
-- A seal is valid until `expires_at`, which is at most the end of the certificate (EU) or of the signer certificate (attestor)
+- A seal is valid until `expires_at`, which is at most the end of the certificate (EU) or of the signer certificate (attestor). NCA certificates last about a year, so a company re-seals at least once a year
+- A signature proves who signed, not that the company is still active. Checks against the state business register are planned
+- The Token-2022 hook works only for tokens created with the extension: SOL, USDC and most existing tokens aren't affected. Some wallets and DEXes handle hooks poorly, and a hook adds accounts and compute to each transfer. Other programs read the registry directly
 
 ## Repository Layout
 
