@@ -1,204 +1,176 @@
-# Mör
+# MOR: on-chain KYC with electronic signatures
 
-Юридическая идентичность для Solana: компания подтверждает свои программы, токены и кошельки
-государственной электронной подписью
+[![CI](https://github.com/Xseron/TheMorEDS/actions/workflows/ci.yml/badge.svg)](https://github.com/Xseron/TheMorEDS/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-14F195.svg)](LICENSE)
+[![Solana](https://img.shields.io/badge/Solana-devnet-9945FF)](https://solana.com)
+[![Hackathon](https://img.shields.io/badge/Colosseum-2026-14F195)](https://colosseum.org)
 
-Работает с двумя видами подписи:
+> MOR links a company to a Solana wallet so applications can verify its identity. The company signs with the electronic signature it already holds, any program checks the seal in one call, and no personal data goes on-chain
 
-- eIDAS (P-256): подпись УЦ над сертификатом проверяет прекомпайл secp256r1 прямо в транзакции,
-  без посредника. Список доверенных УЦ ведёт админ программы, он же upgrade authority
-- НУЦ РК (ГОСТ 34.10-2015): ГОСТа и Стрибога в Solana нет, поэтому подпись проверяет аттестатор
-  вне сети, а в сеть уходит уже его Ed25519-подпись
+[Live Demo](https://morseal.ink) · [KASE Track Demo](https://morseal.ink/kase) · [Docs](docs/) · [Mor-Dividends](https://github.com/Xseron/Mor-Dividends)
 
-Проект для Colosseum Crypto World's Fair 2026
+---
 
-## Что есть
+![MOR](assets/project.png)
 
-- `programs/mor-registry`, реестр. Три типа аккаунтов:
-  - `TrustService`: доверенный УЦ (P-256, eIDAS) или аттестатор (Ed25519, НУЦ РК)
-  - `Certificate`: сертификат юрлица. `register_certificate` проверяет подпись УЦ через прекомпайл
-    P-256 и Instructions sysvar и не пускает сертификаты УЦ, физлиц, TLS-серверов, меток времени
-    и OCSP
-  - `Seal`: печать адреса (кошелёк, программа или минт). В ней кто стоит за адресом, юрисдикция,
-    уровень доверия и срок. Нужны обе стороны: организация подписывает сообщение печати, контролёр
-    адреса подписывает транзакцию. `register_seal_p256` ставит печать ключом сертификата (уровень
-    `Trustless`), `register_seal_attested` через аттестатора (уровень `Attestor`). Снять печать
-    через `revoke_seal` может сохранённый или текущий контролёр
-- `crates/mor-verify-seal`: проверка печати из любой программы одной строкой
-- `programs/sealed-transfer`: демо-токен Token-2022 с transfer hook, переводы проходят только на
-  владельца с действующей печатью
-- Персональные данные подписанта в сеть не попадают. Для НУЦ РК в открытом виде лежит только
-  название организации, БИН хранится хэшем с солью `sha256(соль || KZ || БИН)`, соль остаётся
-  у владельца
-- `fixtures/`: тестовый УЦ, сертификаты и ключ аттестатора (`gen.sh`). Ключи в `fixtures/keys/`
-  только для тестов
-- Program ID на devnet смотрите в `Anchor.toml`
+---
 
-## Проверка печати в своей программе
+## Submission to 2026 Solana National Hackathon
 
-    let seal = mor_verify_seal::verify_seal(&seal_account, &owner, TrustLevel::Attestor)?;
-    // seal.jurisdiction, seal.trust_level, seal.identifier_hash, seal.expires_at
+| Name | Role | Contact |
+|------|------|---------|
+| David Torossyan | Technical co-founder: cryptography and infrastructure | [Telegram](https://t.me/dtorossyan) |
+| Abylaikhan Karsybayev | Product co-founder: design and customer development | [Telegram](https://t.me/ablStartup) |
 
-`seal_account` это PDA `["seal", owner]` программы реестра. Ошибки `Custom(9100..9103)`: печати
-нет, чужой аккаунт, срок истёк, уровень ниже нужного
+---
 
-## Что нужно
+## Problem and Solution
 
-- WSL Ubuntu, сборка и тесты идут из WSL
-- Solana CLI 3.1.10, без неё Anchor 1.1.2 не соберёт программы
-- Anchor 1.1.2
-- Node.js >= 20.11 для `scripts/devnet-v1`
+### 1. The wallet identity gap
+- **Problem:** a Solana wallet shows its full transaction history but not the legal counterparty behind it. Company identity and wallet control need extra evidence every time
+- **MOR:** the company signs a short request with its electronic signature (an NCA key in Kazakhstan, an organization certificate in the EU) and the wallet gets an on-chain organization seal
 
-## Сборка и тесты
+### 2. Every platform repeats onboarding
+- **Problem:** each exchange, payment provider and dApp runs its own verification of business counterparties, and the result stays inside that platform
+- **MOR:** the seal is a public account at `["seal", address]`. Any Solana program checks it with one call from the `mor-verify-seal` crate, no provider API involved
 
-    anchor build
-    cargo test -p mor_registry -p sealed_transfer -p mor-verify-seal
+### 3. Rules already ask who receives a transfer
+- **Problem:** the FATF Travel Rule, EU Regulation 2023/1113 and Kazakhstan's digital-assets law require providers to know the beneficiary of a transfer
+- **MOR:** a Token-2022 transfer hook lets a token move only to wallets with a valid seal of the required trust level. Missing or expired seal: the transfer is rejected
 
-Сначала обязательно `anchor build`: LiteSVM-тесты грузят собранные `target/deploy/*.so`
+### 4. Identity must not leak on-chain
+- **Problem:** certificates and ID numbers on a public ledger expose the people who sign for a company
+- **MOR:** a seal holds the company name and `sha256(salt || jurisdiction || BIN)`. The salt stays with the owner, and the registry doesn't record the person who signed for the company
 
-## Аттестатор НУЦ РК (`attestor/`)
+---
 
-Локальный Go-сервис. Компания подписывает в NCALayer запрос на печать (CAdES, ключ ГОСТ 2015
-НУЦ РК). Аттестатор проверяет подпись через KalkanCrypt, сертифицированное СКЗИ НУЦ, и если
-подписал первый руководитель или сотрудник с правом подписи, подписывает своим Ed25519-ключом
-сообщение печати для `register_seal_attested`
+## Existing Approaches and MOR
 
-- Подпись, цепочку до УЦ НУЦ и отзыв по CRL проверяет только KalkanCrypt через cgo. Поля
-  сертификата (O, `OU=BIN...`, роль в EKU, срок) читает `crypto/x509`, это просто разбор без
-  криптографии
-- В сеть попадают название организации и `sha256(соль || KZ || БИН)`. Соль и БИН аттестатор
-  отдаёт только тому, кто прислал запрос, и нигде не хранит. ФИО и ИИН он не читает и в лог
-  не пишет
-- Ключ `fixtures/keys/attestor.json` и тестовый УЦ НУЦ годятся только для devnet: ключ лежит
-  в репозитории, так что печать уровня "аттестатор" им может поставить кто угодно
+| Approach | Identity source | Application access | Main dependency |
+|----------|-----------------|--------------------|-----------------|
+| Licensed exchanges | Customer onboarding | Exchange integration | Licensed operator |
+| KYB platforms, e.g. Sumsub | Documents and company registries | Provider API | Verification provider |
+| Attestations, e.g. EAS | Issuer-defined claims | Attestation schema | Attestation issuer |
+| **MOR** | Electronic signatures of organizations | Solana registry + Token-2022 hook | Trusted CAs + Kazakhstan attestor |
 
-Код возврата `VerifyData` в KalkanCrypt ничего не говорит о самой подписи ГОСТ. Поэтому вердикт
-берётся из отчёта библиотеки о проверке (`outVerifyInfo`, по каждому подписанту должно быть ровно
-"Verify - OK", иначе отказ), а цепочку и отзыв дополнительно проверяет
-`X509ValidateCertificate(KC_USE_CRL)`. После обновления KalkanCrypt надо заново прогнать
-`go test -tags kalkan ./...`: если текст отчёта поменяется, любая CMS будет отклонена
+Reusable verification across Solana applications. The trust model stays explicit: accepted certificate authorities and attestors
 
-Нужно: Go 1.24, gcc, `sudo apt install libltdl7 libpcsclite1` и SDK НУЦ РК в `pkisdk/`
-(KalkanCrypt, тестовые ключи и УЦ, выдаёт НУЦ РК на pki.gov.kz). SDK в репозиторий не кладём,
-лицензия НУЦ этого не разрешает. Доверенные корни KalkanCrypt берёт только из системного
-хранилища (в WSL это `/etc/ssl/certs`), тестовые корни ставит скрипт из SDK:
+---
 
-    unzip -d /tmp pkisdk/C/Linux/ca-certs/ca-certs_new/test2022.zip && cd /tmp/test2022 && sudo bash install_test.sh
+## Why Solana
 
-Распаковываем в `/tmp`, чтобы ничего из SDK не попало в репозиторий. После `install_test.sh`
-тестовым корням НУЦ доверяет весь дистрибутив WSL. Файлы `--ca` всё равно нужны, по ним
-фиксируется издатель (AuthorityKeyId и DN)
+- **secp256r1 precompile (SIMD-0075):** the program verifies EU P-256 certificates and signatures on-chain, so the eIDAS path needs no trusted middleman
+- **4096-byte v1 transactions:** a whole certificate fits into one transaction next to the precompile instruction
+- **Token-2022 transfer hooks:** the seal check runs on every transfer of a token without wrapping it or changing wallets
+- **PDAs:** a seal lives at a deterministic address, so any program finds it without an index or an off-chain lookup
+- **Low fees:** checking a seal on each transfer and sealing a wallet stay cheap enough for everyday B2B payments
 
-Если тестовых корней в системном хранилище нет, любой запрос получит 401 `bad_signature`. CRL надо
-обновлять до его nextUpdate (у тестового CRL это 2027-02-07): просроченный CRL KalkanCrypt
-не принимает, и каждый запрос получает 500
+---
 
-    cd attestor
-    go test ./...                 # без SDK: запрос, политика, сообщение печати
-    go test -tags kalkan ./...    # с SDK: тестовые ключи НУЦ через KalkanCrypt
-    go build -tags kalkan -o bin/attestor ./cmd/attestor
-    cd .. && attestor/bin/attestor serve        # http://127.0.0.1:8787
+## Summary of Features
 
-`POST /v1/attest` с телом `{"cms": "<base64>"}`, это присоединённая CMS над текстом (UTF-8, LF,
-без перевода строки в конце):
+- Seal registry for wallets, programs and mints with jurisdiction, entity type, trust level and expiry
+- EU path: P-256 organization certificate and signature verified on-chain, trust level `Trustless`
+- Kazakhstan path: NCA signature (GOST 34.10-2015) from NCALayer checked by a Go attestor on the certified KalkanCrypt library, trust level `Attestor`
+- Two-sided consent: the company signs the seal message, the wallet controller signs the transaction
+- Revocation by the stored or the current controller of the address
+- `mor-verify-seal` crate: one call checks the owner, expiry and minimum trust level
+- Token-2022 demo token whose transfer hook admits only sealed recipients
+- Website: "who stands behind this address" extract, sealing through NCALayer or a test attestor, sealed transfer demo, devnet faucet
+- KASE track: corporate actions for a tokenized bond with sealed holders, program in [Mor-Dividends](https://github.com/Xseron/Mor-Dividends)
 
-    MOR-SEAL-REQUEST-V1
-    program: <program ID реестра>
-    address: <адрес>
-    kind: wallet | program | mint
-    controller: <контролёр адреса>
-    expires: <unix>
-    deadline: <unix, не позже чем через 15 минут>
+---
 
-В ответе сообщение печати, подпись аттестатора, название, БИН и соль. Ошибки приходят как
-`{"error": "<код>"}`: `bad_signature`, `revoked`, `role_not_allowed`, `deadline_out_of_window`
-и другие, полный список в `attestor/server/server.go` и `attestor/policy/policy.go`.
-`GET /v1/info` отдаёт ключ аттестатора и его TrustService
+## Tech Stack
 
-Флаги `serve`: `--listen`, `--key`, `--ca` и `--crl` (можно повторять, по умолчанию тестовые УЦ
-и CRL НУЦ из `pkisdk/`), `--program`, `--cors-origin`, `--kalkan-lib` (или `KALKAN_LIB`, по
-умолчанию сертифицированная KalkanCrypt 2.0.2 из SDK). Без NCALayer запрос можно подписать
-dev-командой: `attestor/bin/attestor sign-request --p12 <ключ.p12> --password <пароль> --request <файл>`
+| Layer | Technology |
+|-------|-----------|
+| On-chain programs | Rust · Anchor 1.1 · Token-2022 transfer hook |
+| Signature checks | secp256r1 and Ed25519 precompiles · strict DER parser for X.509 |
+| Seal check for other programs | Rust crate on plain Solana crates, no Anchor |
+| Kazakhstan attestor | Go 1.24 · KalkanCrypt via cgo |
+| Frontend | Nuxt 4 · Vue 3 · Tailwind CSS · @solana/kit · Wallet Standard |
+| Faucet and devnet scripts | Node.js · TypeScript · @solana/kit |
+| Testing | LiteSVM · Go tests · Vitest · Playwright on devnet |
 
-## Сайт (`web/frontend/`)
+---
 
-Nuxt 4, pnpm. Лендинг и демо: выписка "кто стоит за адресом", печать кошелька, перевод демо-токена
+## Architecture
 
-    cd web/frontend
-    pnpm install
-    pnpm dev                                  # http://localhost:3000
+```mermaid
+flowchart LR
+    EU["Compatible EU certificate<br/>P-256 verification on-chain"] --> REG
+    KZ["Kazakhstan NCA certificate<br/>attestor verification"] --> REG
+    CTRL["Wallet controller<br/>consents"] --> REG
+    REG["MOR registry<br/>organization seal<br/>jurisdiction, entity type,<br/>trust level, expiry"] --> HOOK["Token-2022<br/>transfer hook"]
+    REG --> APP["Any Solana program<br/>mor-verify-seal"]
+```
 
-Для печати через НУЦ РК нужен NCALayer на машине пользователя и запущенный рядом аттестатор:
+Valid required seal: allow. Missing or expired seal: reject
 
-    attestor/bin/attestor serve --cors-origin http://localhost:3000
+| Path | How the signature is checked | Trust level |
+|------|------------------------------|-------------|
+| On-chain verification | EU organization certificate, CA signature and seal signature through the secp256r1 precompile | `Trustless` |
+| Attestor | Kazakhstan NCA signature checked off-chain by KalkanCrypt, the attestor signs the seal message with Ed25519 | `Attestor` |
+| Zero-knowledge | Planned privacy layer | |
 
-Без них работает "Test attestor (demo)": страница подписывает сообщение тестовым ключом из
-`fixtures/keys/attestor.json`
+See [docs/architecture.md](docs/architecture.md) for the components, accounts, trust model and limits
 
-Настраивается переменными `NUXT_PUBLIC_RPC_URL`, `NUXT_PUBLIC_ATTESTOR_URL`,
-`NUXT_PUBLIC_SITE_URL` (адрес сайта для превью ссылки и sitemap). Статическая сборка:
-`pnpm generate`, результат в `.output/public`. Страницы `/address/*` собираются в браузере,
-так что хостингу нужен fallback на `200.html`
+---
 
-Тесты: `pnpm test` (Vitest), `pnpm test:e2e` (Playwright на devnet), `pnpm check:build` после
-`pnpm generate`. Для e2e нужен свой кошелёк, в git его нет:
+## Quick Start
 
-    node -e "console.log(JSON.stringify({seed: require('crypto').randomBytes(32).toString('hex')}))" > test/e2e/fixtures/wallet.json
-    node test/e2e/fixtures/address.mjs        # адрес, который надо один раз пополнить
+**Prerequisites:** Linux or WSL, Rust 1.89, Solana CLI 3.1.10, Anchor 1.1.2, Go 1.24, Node.js 20.11+, pnpm 9
 
-### Корпоративные действия по облигации (`/kase`)
+```bash
+# Clone the repository
+git clone https://github.com/Xseron/TheMorEDS
+cd TheMorEDS
 
-Side track для KASE: корпоративные действия по токенизированной облигации на Solana devnet
-(выпуск, купон, погашение). Программа лежит в отдельном репозитории `mor-kase`. Devnet-программа
-`37kyWEQCrscGU8dxhHPGpbxocH4azaZpc4FNip3zEqEv`, эталонная облигация (mint)
-`95JPAUBgwwA1fhyeH1BQfrEwvSrfrfU9RU1quP2iCCQc`. Денежная нога ненастоящая: `tKZT`
-(mint `Qukc9v9Wgwuzaa5gLtoh9n2P3o72fXcofLWVk5SVGJH`) это тестовый токен из крана программы
+# Copy environment variables (every value has a devnet default)
+cp .env.example web/frontend/.env
 
-Адреса задаются переменными `NUXT_PUBLIC_BOND_PROGRAM`, `NUXT_PUBLIC_TKZT_MINT`,
-`NUXT_PUBLIC_KASE_REFERENCE_MINT`
+# Build Solana programs and run their tests (LiteSVM loads the built .so files)
+anchor build
+cargo test -p mor_registry -p sealed_transfer -p mor-verify-seal
 
-Демо-инвесторы (`kase-investor-1...3`) держат ключи в `localStorage` браузера, SOL им переводит
-подключённый кошелёк. Выпуск требует двух подтверждений в кошельке
+# Attestor tests that don't need the NCA SDK
+(cd attestor && go test ./...)
 
-Клиент программы сгенерирован в `app/utils/bond/generated`. Обновить:
+# Start frontend
+cd web/frontend && pnpm install && pnpm dev
+```
 
-    (cd ../../../mor-kase/clients/js && npm run generate)
-    rm -rf app/utils/bond/generated && cp -r ../../../mor-kase/clients/js/src/generated app/utils/bond/generated
+The attestor with KalkanCrypt needs the NCA SDK, which can't be redistributed. Setup is in [docs/architecture.md](docs/architecture.md#kazakhstan-attestor-setup)
 
-`@solana/program-client-core` стоит прямой зависимостью, потому что его импортирует
-сгенерированный код
+Check a seal from your own program:
 
-E2E для `/kase`: `E2E_PORT=3100 pnpm test:e2e kase.spec.ts`. Порт задаём, чтобы не подхватить
-dev-сервер из другого чекаута. На полный жизненный цикл нужно минимум 0,6 SOL на e2e-кошельке
+```rust
+let seal = mor_verify_seal::verify_seal(&seal_account, &owner, TrustLevel::Attestor)?;
+// seal.jurisdiction, seal.trust_level, seal.identifier_hash, seal.expires_at
+```
 
-## Devnet
+---
 
-    cd scripts/devnet-v1 && npm install
-    npm run devnet        # УЦ и сертификат Acme (v1-транзакция)
-    npm run devnet:seal   # аттестатор, печати, токен с хуком, переводы, отзыв
-    npm run devnet:attest -- request              # демо-кошелёк D и текст запроса
-    npm run devnet:attest -- submit <ответ.json>  # печать D по ответу аттестатора, перевод токена на D
+## Roadmap
 
-Между `request` и `submit` запрос подписывается ключом юрлица (NCALayer или
-`attestor/bin/attestor sign-request`) и уходит в `POST /v1/attest`. Ответ сохраняется в файл,
-в нём соль, её хранит владелец D
+- [x] Seal registry with the EU and Kazakhstan paths on devnet
+- [x] `mor-verify-seal` crate and the Token-2022 demo
+- [x] Kazakhstan attestor on KalkanCrypt
+- [x] Website and the KASE corporate actions demo
+- [ ] Complete NCALayer integration and validate with real NCA certificates
+- [ ] Revocation by the organization and on certificate revocation
+- [ ] Audits, security review and mainnet
+- [ ] Zero-knowledge privacy layer
+- [ ] Individual users and additional jurisdictions
 
-Адреса программ берутся из `PROGRAM_ID` и `HOOK_ID`, по умолчанию из `Anchor.toml`. Перед
-отправкой скрипт проверяет, что сертификат это печать юрлица без персональных данных.
-Демо-кошельки создаются в `~/.config/solana/mor-demo/`
+Full roadmap: [docs/roadmap.md](docs/roadmap.md)
 
-## Ограничения
+---
 
-- Отозвать печать может только контролёр адреса, организация пока не может
-- Программу с upgrade authority в мультисиге, а также программу или минт без authority
-  запечатать нельзя
-- Смена владельца программы или минта сама печать не снимает, её отзывает новый контролёр
-- Аттестатор проверяет отзыв сертификата НУЦ по CRL в момент печати. Если сертификат отзовут
-  позже, печать останется. OCSP не используется, а для eIDAS не проверяются ни OCSP, ни CRL
-- Печать действует до `expires_at`, и это не позже конца сертификата (eIDAS) или сертификата
-  подписанта (аттестатор)
+## Resources
 
-## Дальше
-
-Отзыв печати организацией, снятие печати при отзыве сертификата, CAdES для eIDAS, физлица и ИП,
-OCSP/CRL
+- [Live Application](https://morseal.ink)
+- [KASE Corporate Actions Demo](https://morseal.ink/kase)
+- [Mor-Dividends: bond program for the KASE track](https://github.com/Xseron/Mor-Dividends)
+- Telegram: [@dtorossyan](https://t.me/dtorossyan) · [@ablStartup](https://t.me/ablStartup)
