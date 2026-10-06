@@ -9,7 +9,7 @@ A wallet shows its full transaction history but not the legal counterparty behin
 ## First Customers and Users
 
 - **Users:** corporate wallets of companies with electronic signatures
-- **Initial geography:** Kazakhstan, then compatible EU organization certificates
+- **Geography:** Kazakhstan first, then compatible EU organization certificates, then other countries with a national PKI or qualified electronic signatures
 - **First buyer hypothesis:** payment and asset platforms that must verify business counterparties
 - **B2G pilot opportunity:** the Alatau City ecosystem and government reporting teams
 
@@ -20,6 +20,12 @@ A wallet shows its full transaction history but not the legal counterparty behin
 3. **Enforced on-chain:** a Token-2022 transfer hook lets a token move only between sealed wallets of the required trust level
 4. **No personal data on-chain:** the seal holds the company name and a salted hash of its registry number
 5. **Explicit trust model:** accepted certificate authorities and attestors are listed in the registry, and each seal shows its trust level
+
+## Beyond Solana
+
+The seal model doesn't depend on Solana: who stands behind an address, the trust level, the expiry and a salted hash of the registry number. The attestor checks signatures off-chain and only signs the result, so it can serve any network. On EVM networks with a P-256 precompile the EU path works on-chain too, and the token rule becomes a transfer check in the style of ERC-3643
+
+Solana is the first network: the registry, the `mor-verify-seal` crate and the Token-2022 hook are built and running on devnet
 
 ## How It Differs
 

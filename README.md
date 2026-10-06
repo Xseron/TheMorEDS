@@ -162,7 +162,8 @@ let seal = mor_verify_seal::verify_seal(&seal_account, &owner, TrustLevel::Attes
 - [ ] Revocation by the organization and on certificate revocation
 - [ ] Audits, security review and mainnet
 - [ ] Zero-knowledge privacy layer
-- [ ] Individual users and additional jurisdictions
+- [ ] Going global: more countries with a national PKI or qualified signatures, individual users
+- [ ] Other networks: EVM chains with a P-256 precompile, served by the same attestor
 
 Full roadmap: [docs/roadmap.md](docs/roadmap.md)
 

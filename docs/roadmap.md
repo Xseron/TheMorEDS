@@ -25,9 +25,15 @@
 - [ ] Complete the security review and required approvals
 - [ ] Run an approved pilot
 
-## Next Product Scope
+## Going Global
+- [ ] Qualified organization certificates from all EU member states, not only P-256: other algorithms through the attestor
+- [ ] Other countries with a national PKI or qualified electronic signatures. Each one is an adapter, not a new product: on-chain verification when Solana has a precompile for the algorithm, an attestor when it doesn't
 - [ ] Individual users and sole proprietors
-- [ ] Additional jurisdictions
 - [ ] CAdES for EU signatures
+
+## Other Networks
+- [ ] EVM networks with a P-256 precompile (RIP-7212 on L2s, EIP-7951 on Ethereum): a registry contract and a token transfer check in the style of ERC-3643
+- [ ] One attestor for all networks: the same signature check, the result signed in the format of the target network
+- [ ] One signature from the company, seals on several networks
 
 Targets depend on pilot access, regulatory requirements and security review
