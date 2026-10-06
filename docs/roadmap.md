@@ -13,6 +13,7 @@
 - [ ] Complete NCALayer integration and validate company-to-wallet registration with real Kazakhstan NCA certificates before external pilots
 - [ ] Interview public-sector and platform teams
 - [ ] Define reporting needs and regulatory scope
+- [ ] Legal review: which licenses and approvals MOR needs in each jurisdiction
 
 ## Months 3 to 4: Security and Integration
 - [ ] Improve revocation: by the organization and when the certificate is revoked
@@ -25,9 +26,19 @@
 - [ ] Complete the security review and required approvals
 - [ ] Run an approved pilot
 
+## Licenses and Approvals
+- [ ] Agreement with NCA of Kazakhstan for production use of KalkanCrypt and NCA certificates in the attestor
+- [ ] Approval to run the pilot under the digital-asset rules of Alatau City
+- [ ] AFSA FinTech Lab (regulatory sandbox) or a license to work with AIFC participants
+- [ ] EU: qualified trust service status under eIDAS if MOR validates qualified seals as a service
+- [ ] Personal data compliance for the attestor: Kazakhstan's personal data law and GDPR
+
+The exact list depends on the legal review and on how each regulator classifies MOR
+
 ## Going Global
 - [ ] Qualified organization certificates from all EU member states, not only P-256: other algorithms through the attestor
 - [ ] Other countries with a national PKI or qualified electronic signatures. Each one is an adapter, not a new product: on-chain verification when Solana has a precompile for the algorithm, an attestor when it doesn't
+- [ ] Licenses and approvals in each new jurisdiction before launch there
 - [ ] Individual users and sole proprietors
 - [ ] CAdES for EU signatures
 

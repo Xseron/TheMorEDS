@@ -161,6 +161,7 @@ let seal = mor_verify_seal::verify_seal(&seal_account, &owner, TrustLevel::Attes
 - [ ] Complete NCALayer integration and validate with real NCA certificates
 - [ ] Revocation by the organization and on certificate revocation
 - [ ] Audits, security review and mainnet
+- [ ] Licenses and approvals: NCA of Kazakhstan, Alatau City, AFSA (AIFC), eIDAS trust services in the EU
 - [ ] Zero-knowledge privacy layer
 - [ ] Going global: more countries with a national PKI or qualified signatures, individual users
 - [ ] Other networks: EVM chains with a P-256 precompile, served by the same attestor
