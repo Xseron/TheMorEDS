@@ -22,4 +22,4 @@ docs/
 skills-lock.json
 .agents/
 web/frontend/test/e2e/fixtures/wallet.json
-web/frontend/content/images.md
+web/frontend/content/
