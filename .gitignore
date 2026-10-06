@@ -18,8 +18,10 @@ target/deploy/*.so
 .claude/
 .superpowers/
 .playwright-mcp/
-docs/
+docs/superpowers/
+docs/*.log
 skills-lock.json
 .agents/
 web/frontend/test/e2e/fixtures/wallet.json
 web/frontend/content/
+.env

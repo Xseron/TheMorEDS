@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  programs:
+    name: Rust unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # ставит 1.89.0 из rust-toolchain.toml
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      # LiteSVM-тесты из tests/ без anchor build не запустить, здесь только unit
+      - run: cargo test -p mor-verify-seal -p mor_registry --lib
+
+  attestor:
+    name: Attestor
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: attestor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: attestor/go.mod
+          cache-dependency-path: attestor/go.sum
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go test ./...
+
+  web:
+    name: Website
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
+
+  node:
+    name: Faucet and devnet scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            web/drip/package-lock.json
+            scripts/devnet-v1/package-lock.json
+      - run: npm ci && npm test
+        working-directory: web/drip
+      - run: npm ci && npx tsc --noEmit -p .
+        working-directory: scripts/devnet-v1
